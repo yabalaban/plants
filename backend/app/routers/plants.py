@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import shutil
@@ -9,8 +10,30 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.database import get_db
 from app.models import PlantDetailResponse, PlantResponse, WaterPlantRequest, WateringLogResponse
+from app.services.claude import identify_plant
 
 router = APIRouter(prefix="/api/plants", tags=["plants"])
+
+
+async def _identify_and_update(plant_id: int, photo_path: str):
+    from app.database import get_db_path
+    identification = await identify_plant(photo_path)
+    if not identification:
+        return
+    async with aiosqlite.connect(get_db_path()) as db:
+        await db.execute("PRAGMA foreign_keys = ON")
+        db.row_factory = aiosqlite.Row
+        await db.execute("""
+            UPDATE plants SET species = ?, identification_details = ?, base_watering_interval_days = ?
+            WHERE id = ?
+        """, (identification.get("species"), json.dumps(identification),
+              identification.get("base_watering_interval_days", 7), plant_id))
+        interval = identification.get("base_watering_interval_days", 7)
+        await db.execute("""
+            INSERT OR REPLACE INTO watering_schedules (plant_id, interval_days, next_watering, adjustment_reason)
+            VALUES (?, ?, datetime('now', '+' || ? || ' days'), 'initial schedule')
+        """, (plant_id, interval, interval))
+        await db.commit()
 
 
 def _get_photo_dir() -> str:
@@ -71,6 +94,7 @@ async def add_plant(
 
     cursor = await db.execute("SELECT * FROM plants WHERE id = ?", (plant_id,))
     row = await cursor.fetchone()
+    asyncio.create_task(_identify_and_update(plant_id, filepath))
     return PlantResponse(
         id=row["id"],
         name=row["name"],

@@ -61,7 +61,7 @@ Phone (PWA)  ──HTTP over VPN──►  Raspberry Pi
 | Column | Type | Description |
 |--------|------|-------------|
 | id | INTEGER PK | Auto-increment |
-| plant_id | INTEGER FK | References `plants.id` |
+| plant_id | INTEGER FK | References `plants.id` (CASCADE DELETE) |
 | watered_at | TIMESTAMP | When the user logged watering |
 | notes | TEXT, nullable | Optional user note |
 
@@ -70,7 +70,7 @@ Phone (PWA)  ──HTTP over VPN──►  Raspberry Pi
 | Column | Type | Description |
 |--------|------|-------------|
 | id | INTEGER PK | Auto-increment |
-| plant_id | INTEGER FK | References `plants.id` (one active schedule per plant) |
+| plant_id | INTEGER FK | References `plants.id` (one active schedule per plant, CASCADE DELETE) |
 | interval_days | REAL | Current weather-adjusted watering interval |
 | next_watering | TIMESTAMP | Next expected watering date |
 | last_adjusted | TIMESTAMP | When the schedule was last modified |
@@ -183,7 +183,7 @@ Settings stored in a `settings.json` file on the filesystem (not in SQLite — s
 }
 ```
 
-Latitude/longitude are resolved from the city name on save (Open-Meteo uses coordinates).
+Latitude/longitude are resolved from the city name on save using Open-Meteo's geocoding API (`geocoding-api.open-meteo.com`). Reminder time uses the Raspberry Pi's system timezone.
 
 ## Deployment
 

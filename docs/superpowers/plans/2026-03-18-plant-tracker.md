@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.11+, FastAPI, aiosqlite, APScheduler, httpx, SvelteKit, TypeScript, SQLite, Claude CLI, Open-Meteo API, Telegram Bot API
 
+**Tooling:** Use `mise` for managing tool versions (Python, Node.js, uv). Use `uv` for all Python dependency management. If `uv` is not available, install it via `mise`.
+
 **Spec:** `docs/superpowers/specs/2026-03-18-plant-tracker-design.md`
 
 ---
@@ -43,8 +45,7 @@ plants/
 │   │   ├── test_weather.py
 │   │   ├── test_telegram.py
 │   │   └── test_watering.py
-│   ├── requirements.txt
-│   └── pytest.ini
+│   └── pyproject.toml
 ├── frontend/
 │   ├── src/
 │   │   ├── app.html
@@ -64,6 +65,7 @@ plants/
 │   ├── vite.config.ts
 │   ├── package.json
 │   └── tsconfig.json
+├── .mise.toml                         # Tool versions (Python, Node, uv)
 ├── settings.json                      # Runtime config (created on first run)
 └── photos/                            # Plant photo storage
 ```
@@ -73,12 +75,28 @@ plants/
 ## Task 1: Project Scaffolding
 
 **Files:**
-- Create: `backend/app/__init__.py`, `backend/app/main.py`, `backend/requirements.txt`, `backend/pytest.ini`
+- Create: `.mise.toml`, `.gitignore`
+- Create: `backend/app/__init__.py`, `backend/app/main.py`, `backend/pyproject.toml`
 - Create: `backend/app/routers/__init__.py`, `backend/app/services/__init__.py`
 - Create: `frontend/package.json`, `frontend/svelte.config.js`, `frontend/vite.config.ts`, `frontend/tsconfig.json`, `frontend/src/app.html`
-- Create: `.gitignore`
 
-- [ ] **Step 1: Create .gitignore**
+- [ ] **Step 1: Create .mise.toml for tool versions**
+
+```toml
+[tools]
+python = "3.12"
+node = "22"
+uv = "latest"
+```
+
+- [ ] **Step 2: Install tools via mise**
+
+Run: `mise install`
+
+This installs Python, Node.js, and uv. Verify:
+Run: `mise exec -- uv --version && mise exec -- node --version && mise exec -- python --version`
+
+- [ ] **Step 3: Create .gitignore**
 
 ```gitignore
 __pycache__/
@@ -94,33 +112,42 @@ frontend/.svelte-kit/
 .venv/
 ```
 
-- [ ] **Step 2: Create backend Python package structure**
+- [ ] **Step 4: Create backend Python package structure**
 
 Create `backend/app/__init__.py` (empty file).
 Create `backend/app/routers/__init__.py` (empty file).
 Create `backend/app/services/__init__.py` (empty file).
 
-- [ ] **Step 3: Create requirements.txt**
+- [ ] **Step 5: Create pyproject.toml**
 
+`backend/pyproject.toml`:
+```toml
+[project]
+name = "plant-tracker"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.6",
+    "uvicorn[standard]>=0.34.0",
+    "aiosqlite>=0.20.0",
+    "httpx>=0.28.1",
+    "apscheduler>=3.10.4",
+    "python-multipart>=0.0.20",
+    "pydantic>=2.10.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
 ```
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-aiosqlite==0.20.0
-httpx==0.28.1
-apscheduler==3.10.4
-python-multipart==0.0.20
-pydantic==2.10.4
-```
 
-- [ ] **Step 4: Create pytest.ini**
-
-```ini
-[pytest]
-testpaths = tests
-asyncio_mode = auto
-```
-
-- [ ] **Step 5: Create minimal FastAPI app**
+- [ ] **Step 6: Create minimal FastAPI app**
 
 `backend/app/main.py`:
 ```python
@@ -134,25 +161,27 @@ async def health():
     return {"status": "ok"}
 ```
 
-- [ ] **Step 6: Install backend dependencies**
+- [ ] **Step 7: Install backend dependencies with uv**
 
-Run: `cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && pip install pytest pytest-asyncio`
+Run: `cd backend && uv sync`
 
-- [ ] **Step 7: Verify backend starts**
+This creates the venv and installs all dependencies (including dev deps).
 
-Run: `cd backend && source .venv/bin/activate && uvicorn app.main:app --port 8000 &`
+- [ ] **Step 8: Verify backend starts**
+
+Run: `cd backend && uv run uvicorn app.main:app --port 8000 &`
 Then: `curl http://localhost:8000/api/health`
 Expected: `{"status":"ok"}`
 Kill the server after verification.
 
-- [ ] **Step 8: Scaffold SvelteKit frontend**
+- [ ] **Step 9: Scaffold SvelteKit frontend**
 
 Run: `cd frontend && npm create svelte@latest . -- --template skeleton --types typescript`
 
 Then install adapter-static:
 Run: `cd frontend && npm install && npm install -D @sveltejs/adapter-static`
 
-- [ ] **Step 9: Configure SvelteKit for static build**
+- [ ] **Step 10: Configure SvelteKit for static build**
 
 `frontend/svelte.config.js`:
 ```javascript
@@ -172,7 +201,7 @@ const config = {
 export default config;
 ```
 
-- [ ] **Step 10: Add prerender config**
+- [ ] **Step 11: Add prerender config**
 
 `frontend/src/routes/+layout.ts`:
 ```typescript
@@ -180,12 +209,12 @@ export const prerender = false;
 export const ssr = false;
 ```
 
-- [ ] **Step 11: Verify frontend builds**
+- [ ] **Step 12: Verify frontend builds**
 
 Run: `cd frontend && npm run build`
 Expected: Build succeeds, `frontend/build/` directory created.
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
 git add -A
@@ -279,7 +308,7 @@ async def test_init_db_idempotent(env_db_path):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_database.py -v`
+Run: `cd backend && uv run pytest tests/test_database.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.database'`
 
 - [ ] **Step 3: Implement database module**
@@ -353,7 +382,7 @@ async def init_db():
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_database.py -v`
+Run: `cd backend && uv run pytest tests/test_database.py -v`
 Expected: All 3 tests PASS
 
 - [ ] **Step 5: Commit**
@@ -418,7 +447,7 @@ def test_save_creates_file(tmp_path, monkeypatch):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_settings.py -v`
+Run: `cd backend && uv run pytest tests/test_settings.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
 - [ ] **Step 3: Implement settings module**
@@ -470,7 +499,7 @@ def save_settings(settings: AppSettings) -> None:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_settings.py -v`
+Run: `cd backend && uv run pytest tests/test_settings.py -v`
 Expected: All 3 tests PASS
 
 - [ ] **Step 5: Commit**
@@ -688,7 +717,7 @@ async def test_water_plant(client, sample_photo):
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_plants_api.py -v`
+Run: `cd backend && uv run pytest tests/test_plants_api.py -v`
 Expected: FAIL
 
 - [ ] **Step 4: Implement plants router**
@@ -892,7 +921,7 @@ async def health():
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_plants_api.py -v`
+Run: `cd backend && uv run pytest tests/test_plants_api.py -v`
 Expected: All 5 tests PASS
 
 - [ ] **Step 7: Commit**
@@ -972,7 +1001,7 @@ async def test_adjust_schedules_returns_adjustments():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_claude.py -v`
+Run: `cd backend && uv run pytest tests/test_claude.py -v`
 Expected: FAIL
 
 - [ ] **Step 3: Implement Claude CLI service**
@@ -1057,7 +1086,7 @@ async def adjust_schedules(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_claude.py -v`
+Run: `cd backend && uv run pytest tests/test_claude.py -v`
 Expected: All 4 tests PASS
 
 - [ ] **Step 5: Add background identification trigger to plants router**
@@ -1207,7 +1236,7 @@ async def test_fetch_weather():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_weather.py -v`
+Run: `cd backend && uv run pytest tests/test_weather.py -v`
 Expected: FAIL
 
 - [ ] **Step 3: Implement weather service**
@@ -1264,7 +1293,7 @@ async def fetch_weather(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_weather.py -v`
+Run: `cd backend && uv run pytest tests/test_weather.py -v`
 Expected: All 3 tests PASS
 
 - [ ] **Step 5: Commit**
@@ -1346,7 +1375,7 @@ async def test_send_message_failure():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_telegram.py -v`
+Run: `cd backend && uv run pytest tests/test_telegram.py -v`
 Expected: FAIL
 
 - [ ] **Step 3: Implement Telegram service**
@@ -1393,7 +1422,7 @@ def format_watering_reminder(plants: list[dict]) -> str | None:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_telegram.py -v`
+Run: `cd backend && uv run pytest tests/test_telegram.py -v`
 Expected: All 5 tests PASS
 
 - [ ] **Step 5: Commit**
@@ -1471,7 +1500,7 @@ async def test_get_plants_needing_water(env_db_path):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_watering.py -v`
+Run: `cd backend && uv run pytest tests/test_watering.py -v`
 Expected: FAIL
 
 - [ ] **Step 3: Implement watering logic**
@@ -1519,7 +1548,7 @@ async def get_plants_needing_water(db: aiosqlite.Connection) -> list[dict]:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_watering.py -v`
+Run: `cd backend && uv run pytest tests/test_watering.py -v`
 Expected: All 3 tests PASS
 
 - [ ] **Step 5: Commit**
@@ -1585,7 +1614,7 @@ Add the `client` fixture import — it's already in `conftest.py`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_settings.py -v`
+Run: `cd backend && uv run pytest tests/test_settings.py -v`
 Expected: New API tests FAIL (404)
 
 - [ ] **Step 3: Implement settings router**
@@ -1672,7 +1701,7 @@ app.include_router(settings_router.router)
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest tests/test_settings.py -v`
+Run: `cd backend && uv run pytest tests/test_settings.py -v`
 Expected: All 6 tests PASS
 
 - [ ] **Step 6: Commit**
@@ -1871,7 +1900,7 @@ async def lifespan(app: FastAPI):
 
 - [ ] **Step 3: Run all backend tests**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest -v`
+Run: `cd backend && uv run pytest -v`
 Expected: All tests PASS
 
 - [ ] **Step 4: Commit**
@@ -1958,7 +1987,7 @@ Update `_identify_and_update` to receive the actual filesystem path separately f
 
 - [ ] **Step 3: Run all tests**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest -v`
+Run: `cd backend && uv run pytest -v`
 Expected: All tests PASS
 
 - [ ] **Step 4: Commit**
@@ -3281,13 +3310,13 @@ git commit -m "feat: add PWA manifest and meta tags"
 
 - [ ] **Step 1: Run full backend test suite**
 
-Run: `cd backend && source .venv/bin/activate && python -m pytest -v`
+Run: `cd backend && uv run pytest -v`
 Expected: All tests PASS
 
 - [ ] **Step 2: Build frontend and test full stack locally**
 
 Run: `cd frontend && npm run build`
-Then: `cd backend && source .venv/bin/activate && PLANTS_DB_PATH=./test_run.db uvicorn app.main:app --host 0.0.0.0 --port 8000`
+Then: `cd backend && PLANTS_DB_PATH=./test_run.db uv run uvicorn app.main:app --host 0.0.0.0 --port 8000`
 
 Open `http://localhost:8000` in a mobile-width browser. Verify:
 - Dashboard renders (empty state)

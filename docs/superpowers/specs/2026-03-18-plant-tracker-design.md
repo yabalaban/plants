@@ -190,12 +190,13 @@ Latitude/longitude are resolved from the city name on save using Open-Meteo's ge
 Single-process deployment on Raspberry Pi:
 
 1. Clone repo
-2. Install Python dependencies (`pip install fastapi uvicorn apscheduler httpx python-telegram-bot aiosqlite`)
-3. Build SvelteKit frontend (`npm run build` → static files)
-4. Run: `uvicorn app.main:app --host 0.0.0.0 --port 8000`
-5. Access from phone via VPN at `http://<rpi-ip>:8000`
+2. Install tools: `mise install` (provides Python, Node.js, uv)
+3. Install Python dependencies: `cd backend && uv sync`
+4. Build SvelteKit frontend: `cd frontend && npm install && npm run build`
+5. Run: `cd backend && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000`
+6. Access from phone via VPN at `http://<rpi-ip>:8000`
 
-Prerequisites: Claude CLI installed and authenticated on the RPi.
+Prerequisites: `mise` and Claude CLI installed and authenticated on the RPi.
 
 ## Cost Estimate
 

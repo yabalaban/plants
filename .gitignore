@@ -11,3 +11,4 @@ frontend/.svelte-kit/
 .venv/
 .DS_Store
 .playwright-mcp/
+/debug-*

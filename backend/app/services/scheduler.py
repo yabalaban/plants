@@ -89,7 +89,7 @@ def start_scheduler():
     settings = load_settings()
     hour, minute = (int(x) for x in settings.reminder_time.split(":"))
     scheduler.add_job(job_send_reminders, CronTrigger(hour=hour, minute=minute), id="send_reminders", replace_existing=True)
-    scheduler.add_job(job_adjust_schedules, CronTrigger(day_of_week="mon", hour=7, minute=0), id="adjust_schedules", replace_existing=True)
+    scheduler.add_job(job_adjust_schedules, CronTrigger(day="*/3", hour=7, minute=0), id="adjust_schedules", replace_existing=True)
     scheduler.start()
 
 

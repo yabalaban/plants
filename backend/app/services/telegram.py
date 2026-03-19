@@ -25,12 +25,51 @@ def _escape_markdown(text: str) -> str:
     return text
 
 
+import hashlib
+from datetime import date
+
+_GREETINGS = [
+    "Morty\\! *burp* Your plants are dying, Morty\\!",
+    "Listen Morty, I\\-I turned myself into a watering can\\! Just kidding, water your plants\\.",
+    "Wubba lubba dub dub\\! Translation: water your plants\\.",
+    "In infinite universes, Morty, there's one where you water on time\\. This isn't it\\.",
+    "I'm a genius, Morty, and even I can't photosynthesize for your plants\\.",
+    "Morty, these plants have more will to live than half the Citadel\\. Help them out\\.",
+    "Your plants called, Morty\\. They said \\*burp\\* they're thirsty\\.",
+    "Don't be like Jerry, Morty\\. Jerry forgets to water plants\\.",
+    "I've seen things you wouldn't believe, Morty\\. A wilted fern is the saddest\\.",
+    "Morty, the multiverse has spoken\\. It says water your damn plants\\.",
+]
+
+_OVERDUE_QUIPS = [
+    "are you trying to speedrun plant murder?",
+    "even Jerry would've watered by now",
+    "this is a crime against botany, Morty",
+    "I've seen interdimensional neglect less severe",
+    "the plant dimension is filing a complaint",
+]
+
+
 def format_watering_reminder(plants: list[dict]) -> str | None:
     if not plants:
         return None
-    lines = ["*Time to water your plants\\!*\n"]
-    for p in plants:
-        name = _escape_markdown(p["name"])
-        label = " \\(overdue\\!\\)" if p["status"] == "overdue" else ""
-        lines.append(f"\\- {name}{label}")
+    # Rotate based on date so it's different each day but deterministic
+    day_hash = int(hashlib.md5(date.today().isoformat().encode()).hexdigest(), 16)
+    greeting = _GREETINGS[day_hash % len(_GREETINGS)]
+
+    overdue = [p for p in plants if p["status"] == "overdue"]
+    due = [p for p in plants if p["status"] != "overdue"]
+
+    lines = [f"🧪 {greeting}\n"]
+    if overdue:
+        quip = _OVERDUE_QUIPS[day_hash % len(_OVERDUE_QUIPS)]
+        lines.append(f"🚨 *OVERDUE* \\({_escape_markdown(quip)}\\):")
+        for p in overdue:
+            lines.append(f"  💀 {_escape_markdown(p['name'])}")
+        lines.append("")
+    if due:
+        lines.append("💧 *Due today:*")
+        for p in due:
+            lines.append(f"  🌱 {_escape_markdown(p['name'])}")
+
     return "\n".join(lines)

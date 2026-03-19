@@ -6,7 +6,7 @@ def test_format_watering_reminder_single():
     plants = [{"name": "Monstera", "status": "due"}]
     msg = format_watering_reminder(plants)
     assert "Monstera" in msg
-    assert "water" in msg.lower()
+    assert "Due today" in msg
 
 def test_format_watering_reminder_multiple():
     plants = [{"name": "Monstera", "status": "due"}, {"name": "Fern", "status": "overdue"}]

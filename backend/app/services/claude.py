@@ -1,15 +1,17 @@
 import asyncio
 import json
 import logging
+import os
 import re
 
 logger = logging.getLogger(__name__)
 
 
 async def _run_claude_cli(prompt: str, image_path: str | None = None) -> str:
-    cmd = ["claude", "-p", prompt, "--output-format", "text"]
     if image_path:
-        cmd.extend(["--files", image_path])
+        abs_path = os.path.abspath(image_path)
+        prompt = f"Read the image file at {abs_path} and then:\n\n{prompt}"
+    cmd = ["claude", "-p", prompt, "--output-format", "text"]
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )

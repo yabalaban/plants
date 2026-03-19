@@ -1,6 +1,6 @@
 import json
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from app.services.weather import fetch_weather, geocode_city
 
 MOCK_GEOCODE_RESPONSE = {"results": [{"name": "Amsterdam", "latitude": 52.374, "longitude": 4.8897}]}
@@ -12,11 +12,18 @@ MOCK_WEATHER_RESPONSE = {
     }
 }
 
+
+def _make_mock_response(data):
+    """Create a mock httpx.Response with sync .json() method."""
+    resp = MagicMock()
+    resp.json.return_value = data
+    resp.raise_for_status = MagicMock()
+    return resp
+
+
 @pytest.mark.asyncio
 async def test_geocode_city():
-    mock_response = AsyncMock()
-    mock_response.json.return_value = MOCK_GEOCODE_RESPONSE
-    mock_response.raise_for_status = lambda: None
+    mock_response = _make_mock_response(MOCK_GEOCODE_RESPONSE)
     with patch("app.services.weather.httpx.AsyncClient") as MockClient:
         mock_client = AsyncMock()
         mock_client.get.return_value = mock_response
@@ -29,9 +36,7 @@ async def test_geocode_city():
 
 @pytest.mark.asyncio
 async def test_geocode_city_not_found():
-    mock_response = AsyncMock()
-    mock_response.json.return_value = {"results": []}
-    mock_response.raise_for_status = lambda: None
+    mock_response = _make_mock_response({"results": []})
     with patch("app.services.weather.httpx.AsyncClient") as MockClient:
         mock_client = AsyncMock()
         mock_client.get.return_value = mock_response
@@ -43,9 +48,7 @@ async def test_geocode_city_not_found():
 
 @pytest.mark.asyncio
 async def test_fetch_weather():
-    mock_response = AsyncMock()
-    mock_response.json.return_value = MOCK_WEATHER_RESPONSE
-    mock_response.raise_for_status = lambda: None
+    mock_response = _make_mock_response(MOCK_WEATHER_RESPONSE)
     with patch("app.services.weather.httpx.AsyncClient") as MockClient:
         mock_client = AsyncMock()
         mock_client.get.return_value = mock_response

@@ -36,11 +36,12 @@
         event.preventDefault();
         saving = true;
         try {
-            const update: Record<string, string> = {};
-            if (city.trim()) update.location_city = city.trim();
+            const update: Record<string, string> = {
+                location_city: city.trim(),
+                telegram_chat_id: chatId.trim(),
+                reminder_time: reminderTime,
+            };
             if (botToken.trim()) update.telegram_bot_token = botToken.trim();
-            if (chatId.trim()) update.telegram_chat_id = chatId.trim();
-            if (reminderTime) update.reminder_time = reminderTime;
 
             settings = await updateSettings(update);
             botToken = '';

@@ -8,11 +8,15 @@
     let error = $state<string | null>(null);
     let watering = $state<Set<number>>(new Set());
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    function getToday(): Date {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }
 
     function getStatus(plant: Plant): 'overdue' | 'due' | 'upcoming' | 'unscheduled' {
         if (!plant.next_watering) return 'unscheduled';
+        const today = getToday();
         const next = new Date(plant.next_watering);
         next.setHours(0, 0, 0, 0);
         const diff = Math.floor((next.getTime() - today.getTime()) / 86400000);
@@ -22,6 +26,7 @@
     }
 
     function daysUntil(dateStr: string): string {
+        const today = getToday();
         const next = new Date(dateStr);
         next.setHours(0, 0, 0, 0);
         const diff = Math.floor((next.getTime() - today.getTime()) / 86400000);
@@ -45,7 +50,7 @@
     );
 
     let todayStr = $derived(
-        today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+        getToday().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
     );
 
     async function load() {
@@ -68,7 +73,7 @@
             await waterPlant(plant.id);
             await load();
         } catch {
-            // silently fail
+            error = 'Failed to log watering';
         } finally {
             watering = new Set([...watering].filter(id => id !== plant.id));
         }

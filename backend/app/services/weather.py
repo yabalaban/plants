@@ -9,7 +9,7 @@ async def geocode_city(city: str) -> tuple[float, float] | None:
     async with httpx.AsyncClient() as client:
         resp = await client.get(GEOCODE_URL, params={"name": city, "count": 1})
         resp.raise_for_status()
-        data = await resp.json()
+        data = resp.json()
     results = data.get("results", [])
     if not results:
         return None
@@ -24,7 +24,7 @@ async def fetch_weather(latitude: float, longitude: float, days: int = 7) -> lis
     async with httpx.AsyncClient() as client:
         resp = await client.get(WEATHER_URL, params=params)
         resp.raise_for_status()
-        data = await resp.json()
+        data = resp.json()
     daily = data["daily"]
     return [{"date": daily["time"][i], "temp_high": daily["temperature_2m_max"][i],
              "temp_low": daily["temperature_2m_min"][i], "humidity": daily["relative_humidity_2m_mean"][i],

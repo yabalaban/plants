@@ -15,6 +15,11 @@ def test_format_watering_reminder_multiple():
     assert "Fern" in msg
     assert "overdue" in msg.lower()
 
+def test_format_watering_reminder_escapes_special_chars():
+    plants = [{"name": "My *Star* Plant", "status": "due"}]
+    msg = format_watering_reminder(plants)
+    assert r"\*Star\*" in msg
+
 def test_format_watering_reminder_empty():
     msg = format_watering_reminder([])
     assert msg is None

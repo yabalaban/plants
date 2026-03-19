@@ -36,7 +36,7 @@
             showNotesInput = false;
             await load();
         } catch {
-            // silently fail
+            error = 'Failed to log watering';
         } finally {
             watering = false;
         }

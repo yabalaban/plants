@@ -1,9 +1,12 @@
 import asyncio
 import json
+import logging
 import os
 import shutil
 import uuid
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 import aiosqlite
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -17,23 +20,37 @@ router = APIRouter(prefix="/api/plants", tags=["plants"])
 
 async def _identify_and_update(plant_id: int, photo_path: str):
     from app.database import get_db_path
-    identification = await identify_plant(photo_path)
-    if not identification:
-        return
-    async with aiosqlite.connect(get_db_path()) as db:
-        await db.execute("PRAGMA foreign_keys = ON")
-        db.row_factory = aiosqlite.Row
-        await db.execute("""
-            UPDATE plants SET species = ?, identification_details = ?, base_watering_interval_days = ?
-            WHERE id = ?
-        """, (identification.get("species"), json.dumps(identification),
-              identification.get("base_watering_interval_days", 7), plant_id))
+    try:
+        identification = await identify_plant(photo_path)
+        if not identification:
+            return
+
+        # Validate LLM output
         interval = identification.get("base_watering_interval_days", 7)
-        await db.execute("""
-            INSERT OR REPLACE INTO watering_schedules (plant_id, interval_days, next_watering, adjustment_reason)
-            VALUES (?, ?, datetime('now', '+' || ? || ' days'), 'initial schedule')
-        """, (plant_id, interval, interval))
-        await db.commit()
+        try:
+            interval = int(interval)
+        except (TypeError, ValueError):
+            interval = 7
+        if interval < 1 or interval > 90:
+            interval = 7
+
+        async with aiosqlite.connect(get_db_path()) as db:
+            await db.execute("PRAGMA foreign_keys = ON")
+            # Check plant still exists (may have been deleted during identification)
+            cursor = await db.execute("SELECT id FROM plants WHERE id = ?", (plant_id,))
+            if not await cursor.fetchone():
+                return
+            await db.execute("""
+                UPDATE plants SET species = ?, identification_details = ?, base_watering_interval_days = ?
+                WHERE id = ?
+            """, (identification.get("species"), json.dumps(identification), interval, plant_id))
+            await db.execute("""
+                INSERT OR REPLACE INTO watering_schedules (plant_id, interval_days, next_watering, adjustment_reason)
+                VALUES (?, ?, datetime('now', '+' || ? || ' days'), 'initial schedule')
+            """, (plant_id, interval, interval))
+            await db.commit()
+    except Exception:
+        logger.exception("Background identification failed for plant %d", plant_id)
 
 
 def _get_photo_dir() -> str:
@@ -46,7 +63,7 @@ async def list_plants(db: aiosqlite.Connection = Depends(get_db)):
         SELECT p.*, s.interval_days, s.next_watering, s.adjustment_reason
         FROM plants p
         LEFT JOIN watering_schedules s ON p.id = s.plant_id
-        ORDER BY s.next_watering ASC NULLS LAST
+        ORDER BY CASE WHEN s.next_watering IS NULL THEN 1 ELSE 0 END, s.next_watering ASC
     """)
     rows = await cursor.fetchall()
     plants = []
@@ -77,7 +94,10 @@ async def add_plant(
 ):
     photo_dir = _get_photo_dir()
     os.makedirs(photo_dir, exist_ok=True)
-    ext = os.path.splitext(photo.filename or "photo.jpg")[1] or ".jpg"
+    ext = os.path.splitext(photo.filename or "photo.jpg")[1].lower() or ".jpg"
+    allowed_exts = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+    if ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"Unsupported image format: {ext}")
     filename = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(photo_dir, filename)
 

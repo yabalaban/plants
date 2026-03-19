@@ -57,9 +57,20 @@ async def job_adjust_schedules():
         if not weather:
             return
     adjustments = await adjust_schedules(plants, weather)
+    plant_ids = {p["id"] for p in plants}
     async with aiosqlite.connect(get_db_path()) as db:
         await db.execute("PRAGMA foreign_keys = ON")
         for adj in adjustments:
+            # Validate LLM output
+            pid = adj.get("plant_id")
+            if pid not in plant_ids:
+                continue
+            try:
+                interval = float(adj["interval_days"])
+            except (TypeError, ValueError, KeyError):
+                continue
+            if interval < 0.5 or interval > 90:
+                continue
             await db.execute("""
                 UPDATE watering_schedules SET interval_days = ?, last_adjusted = CURRENT_TIMESTAMP,
                     adjustment_reason = ?, next_watering = datetime(
@@ -69,7 +80,7 @@ async def job_adjust_schedules():
                         ),
                         '+' || ? || ' days')
                 WHERE plant_id = ?
-            """, (adj["interval_days"], adj.get("reason", "weather adjustment"), adj["plant_id"], adj["interval_days"], adj["plant_id"]))
+            """, (interval, adj.get("reason", "weather adjustment"), pid, interval, pid))
         await db.commit()
 
 

@@ -9,3 +9,5 @@ frontend/build/
 frontend/.svelte-kit/
 .superpowers/
 .venv/
+.DS_Store
+.playwright-mcp/

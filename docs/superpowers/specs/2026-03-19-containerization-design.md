@@ -56,6 +56,7 @@ ENV PLANTS_PHOTO_DIR=/data/photos
 ENV PLANTS_SETTINGS_PATH=/data/config/settings.json
 ENV PLANTS_FRONTEND_DIR=/app/frontend/build
 ENV CLAUDE_CLI_TIMEOUT=120
+ENV UV_NO_CACHE=1
 
 USER app
 EXPOSE 8472
@@ -178,7 +179,7 @@ podman run -d \
   -v "$DATA_DIR/photos":/data/photos:rw \
   -v "$DATA_DIR/config":/data/config:rw \
   -v "$HOME/.claude":/home/app/.claude:ro \
-  -v "$(which claude)":/usr/local/bin/claude:ro \
+  -v "$(mise which claude)":/usr/local/bin/claude:ro \
   --secret telegram_bot_token \
   --secret telegram_chat_id \
   --health-cmd "curl -sf http://localhost:8472/api/health || exit 1" \

@@ -15,6 +15,14 @@ fi
 # Ensure data directories exist
 mkdir -p "$DATA_DIR"/{db,photos,config}
 
+# Stage Claude config readable by container's subordinate UID
+CLAUDE_STAGE="$DATA_DIR/.claude-stage"
+rm -rf "$CLAUDE_STAGE"
+mkdir -p "$CLAUDE_STAGE"
+cp -a "$HOME/.claude" "$CLAUDE_STAGE/claude-dir"
+cp "$HOME/.claude.json" "$CLAUDE_STAGE/claude.json"
+chmod -R a+rX "$CLAUDE_STAGE"
+
 # Stop existing container if running
 podman stop "$NAME" 2>/dev/null || true
 podman rm "$NAME" 2>/dev/null || true
@@ -26,14 +34,14 @@ podman run -d \
   --tmpfs /tmp \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
-  --userns=keep-id \
+  --user 1000:1000 \
   --network pasta:--ipv4-only \
   -p 5757:8472 \
-  -v "$DATA_DIR/db":/data/db:rw \
-  -v "$DATA_DIR/photos":/data/photos:rw \
-  -v "$DATA_DIR/config":/data/config:rw \
-  -v "$HOME/.claude":/home/app/.claude:ro \
-  -v "$HOME/.claude.json":/home/app/.claude.json:ro \
+  -v "$DATA_DIR/db":/data/db:rw,U \
+  -v "$DATA_DIR/photos":/data/photos:rw,U \
+  -v "$DATA_DIR/config":/data/config:rw,U \
+  -v "$CLAUDE_STAGE/claude-dir":/home/app/.claude:ro \
+  -v "$CLAUDE_STAGE/claude.json":/home/app/.claude.json:ro \
   -v "$CLAUDE_BIN":/usr/local/bin/claude:ro \
   --secret telegram_bot_token \
   --secret telegram_chat_id \

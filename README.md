@@ -183,7 +183,7 @@ podman restart plant-tracker              # restart
 The container runs with multiple hardening layers:
 
 - **Rootless Podman** — no root access on host, even if container is compromised
-- **`--userns=keep-id`** — host UID maps directly to container UID, no subordinate UID issues
+- **Subordinate UID namespace** — container UID maps to unprivileged host UID, not the real user
 - **`--network pasta:--ipv4-only`** — prevents IPv6 accept-then-reset that breaks Safari/Happy Eyeballs
 - **Read-only filesystem** — container rootfs is immutable (`/tmp` is tmpfs)
 - **No capabilities** — all Linux capabilities dropped

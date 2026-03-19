@@ -61,7 +61,7 @@ podman build -t plant-tracker:latest .
 ./deploy.sh
 ```
 
-Container runs internally on port 8472, mapped to host port **5757**. Security: rootless Podman, read-only filesystem, all capabilities dropped, `--userns=keep-id`, `--network pasta:--ipv4-only`, no-new-privileges, Podman secrets for Telegram.
+Container runs internally on port 8472, mapped to host port **5757**. Security: rootless Podman, read-only filesystem, all capabilities dropped, subordinate UID namespace (`--user 1000:1000`), `--network pasta:--ipv4-only`, no-new-privileges, Podman secrets for Telegram.
 
 ### systemd auto-start
 
@@ -231,7 +231,7 @@ SELECT * FROM claude_logs ORDER BY created_at DESC LIMIT 5;
 - **Claude call logging**: every CLI call is logged to `claude_logs` table with task, prompt, response, error, and duration.
 - **Plant location**: indoor/balcony toggle affects schedule adjustment — balcony plants get temperature-aware intervals.
 - **Secrets**: `settings.py` reads from `/run/secrets/` first (Podman secrets), falls back to `settings.json`. In container mode, Telegram creds come from secrets only.
-- **Container networking**: `--userns=keep-id` maps host UID directly to container UID (no subordinate UID issues). `pasta:--ipv4-only` prevents IPv6 accept-then-reset that breaks Safari with `.local` mDNS.
+- **Container networking**: `--user 1000:1000` with `:U` volume mounts for proper subordinate UID ownership. `deploy.sh` stages Claude config to a world-readable copy so the container's subordinate UID can read it. `pasta:--ipv4-only` prevents IPv6 accept-then-reset that breaks Safari with `.local` mDNS.
 - **Geocoding**: Open-Meteo geocoding strips country suffix ("London, UK" → "London") as the API doesn't handle the comma format.
 - **Weather**: fetches 7 past + 3 forecast days, all included in adjustment query. `INSERT OR REPLACE` on unique date avoids duplicates.
 

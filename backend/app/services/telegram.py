@@ -1,4 +1,7 @@
+import hashlib
 import logging
+from datetime import date
+
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -24,9 +27,6 @@ def _escape_markdown(text: str) -> str:
         text = text.replace(ch, f"\\{ch}")
     return text
 
-
-import hashlib
-from datetime import date
 
 _GREETINGS = [
     "Morty\\! *burp* Your plants are dying, Morty\\!",

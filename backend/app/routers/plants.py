@@ -2,11 +2,7 @@ import asyncio
 import json
 import logging
 import os
-import shutil
 import uuid
-from datetime import datetime
-
-logger = logging.getLogger(__name__)
 
 import aiosqlite
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -15,6 +11,8 @@ from app.database import get_db
 from app.models import PlantDetailResponse, PlantResponse, PlantUpdate, WaterPlantRequest, WateringLogResponse
 from app.services.claude import identify_plant, check_plant_health
 from app.services.scheduler import job_adjust_schedules
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/plants", tags=["plants"])
 
@@ -118,6 +116,7 @@ async def add_plant(
     )
     await db.commit()
     plant_id = cursor.lastrowid
+    assert plant_id is not None
 
     cursor = await db.execute("SELECT * FROM plants WHERE id = ?", (plant_id,))
     row = await cursor.fetchone()

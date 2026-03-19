@@ -57,8 +57,10 @@ async def trigger_health_check_all(db: aiosqlite.Connection = Depends(get_db)):
             continue
         # Translate web path to filesystem path
         photo_dir = os.environ.get("PLANTS_PHOTO_DIR", "./photos")
-        photo_file = os.path.join(photo_dir, os.path.basename(p["photo_path"]))
-        health = await check_plant_health(photo_file, p["species"])
+        photo_path = str(p["photo_path"])
+        species: str | None = str(p["species"]) if p["species"] else None
+        photo_file = os.path.join(photo_dir, os.path.basename(photo_path))
+        health = await check_plant_health(photo_file, species)
         if health:
             await db.execute("UPDATE plants SET health_status = ? WHERE id = ?", (_json.dumps(health), p["id"]))
             await db.commit()

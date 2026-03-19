@@ -7,6 +7,9 @@ import re
 logger = logging.getLogger(__name__)
 
 
+CLI_TIMEOUT = int(os.environ.get("CLAUDE_CLI_TIMEOUT", "120"))
+
+
 async def _run_claude_cli(prompt: str, image_path: str | None = None) -> str:
     if image_path:
         abs_path = os.path.abspath(image_path)
@@ -15,7 +18,12 @@ async def _run_claude_cli(prompt: str, image_path: str | None = None) -> str:
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await proc.communicate()
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=CLI_TIMEOUT)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise RuntimeError(f"Claude CLI timed out after {CLI_TIMEOUT}s")
     if proc.returncode != 0:
         raise RuntimeError(f"Claude CLI failed: {stderr.decode()}")
     return stdout.decode().strip()

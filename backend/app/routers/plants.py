@@ -12,8 +12,9 @@ import aiosqlite
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.database import get_db
-from app.models import PlantDetailResponse, PlantResponse, WaterPlantRequest, WateringLogResponse
+from app.models import PlantDetailResponse, PlantResponse, PlantUpdate, WaterPlantRequest, WateringLogResponse
 from app.services.claude import identify_plant
+from app.services.scheduler import job_adjust_schedules
 
 router = APIRouter(prefix="/api/plants", tags=["plants"])
 
@@ -49,6 +50,8 @@ async def _identify_and_update(plant_id: int, photo_path: str):
                 VALUES (?, ?, datetime('now', '+' || ? || ' days'), 'initial schedule')
             """, (plant_id, interval, interval))
             await db.commit()
+        # Adjust schedule based on current weather data (if available)
+        await job_adjust_schedules()
     except Exception:
         logger.exception("Background identification failed for plant %d", plant_id)
 
@@ -75,6 +78,7 @@ async def list_plants(db: aiosqlite.Connection = Depends(get_db)):
             id=row["id"],
             name=row["name"],
             species=row["species"],
+            location=row["location"],
             photo_path=row["photo_path"],
             identification_details=identification,
             base_watering_interval_days=row["base_watering_interval_days"],
@@ -89,6 +93,7 @@ async def list_plants(db: aiosqlite.Connection = Depends(get_db)):
 @router.post("", response_model=PlantResponse, status_code=201)
 async def add_plant(
     name: str = Form(...),
+    location: str = Form("indoor"),
     photo: UploadFile = File(...),
     db: aiosqlite.Connection = Depends(get_db),
 ):
@@ -106,9 +111,11 @@ async def add_plant(
         f.write(content)
 
     web_path = f"/photos/{filename}"
+    if location not in ("indoor", "balcony"):
+        location = "indoor"
     cursor = await db.execute(
-        "INSERT INTO plants (name, photo_path) VALUES (?, ?)",
-        (name, web_path),
+        "INSERT INTO plants (name, location, photo_path) VALUES (?, ?, ?)",
+        (name, location, web_path),
     )
     await db.commit()
     plant_id = cursor.lastrowid
@@ -120,6 +127,7 @@ async def add_plant(
         id=row["id"],
         name=row["name"],
         species=row["species"],
+        location=row["location"],
         photo_path=row["photo_path"],
         identification_details=None,
         base_watering_interval_days=row["base_watering_interval_days"],
@@ -153,6 +161,7 @@ async def get_plant(plant_id: int, db: aiosqlite.Connection = Depends(get_db)):
         id=row["id"],
         name=row["name"],
         species=row["species"],
+        location=row["location"],
         photo_path=row["photo_path"],
         identification_details=identification,
         base_watering_interval_days=row["base_watering_interval_days"],
@@ -185,6 +194,34 @@ async def water_plant(plant_id: int, body: WaterPlantRequest, db: aiosqlite.Conn
     """, (plant_id,))
     await db.commit()
     return {"status": "logged"}
+
+
+@router.patch("/{plant_id}", response_model=PlantResponse)
+async def update_plant(plant_id: int, body: PlantUpdate, db: aiosqlite.Connection = Depends(get_db)):
+    cursor = await db.execute("SELECT id FROM plants WHERE id = ?", (plant_id,))
+    if not await cursor.fetchone():
+        raise HTTPException(status_code=404, detail="Plant not found")
+    if body.name is not None:
+        await db.execute("UPDATE plants SET name = ? WHERE id = ?", (body.name, plant_id))
+    if body.location is not None:
+        if body.location not in ("indoor", "balcony"):
+            raise HTTPException(status_code=400, detail="Location must be 'indoor' or 'balcony'")
+        await db.execute("UPDATE plants SET location = ? WHERE id = ?", (body.location, plant_id))
+    await db.commit()
+    cursor = await db.execute("""
+        SELECT p.*, s.interval_days, s.next_watering, s.adjustment_reason
+        FROM plants p LEFT JOIN watering_schedules s ON p.id = s.plant_id
+        WHERE p.id = ?
+    """, (plant_id,))
+    row = await cursor.fetchone()
+    identification = json.loads(row["identification_details"]) if row["identification_details"] else None
+    return PlantResponse(
+        id=row["id"], name=row["name"], species=row["species"], location=row["location"],
+        photo_path=row["photo_path"], identification_details=identification,
+        base_watering_interval_days=row["base_watering_interval_days"],
+        created_at=row["created_at"], interval_days=row["interval_days"],
+        next_watering=row["next_watering"], adjustment_reason=row["adjustment_reason"],
+    )
 
 
 @router.delete("/{plant_id}", status_code=204)

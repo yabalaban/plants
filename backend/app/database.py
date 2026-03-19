@@ -26,6 +26,7 @@ async def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 species TEXT,
+                location TEXT NOT NULL DEFAULT 'indoor',
                 photo_path TEXT NOT NULL,
                 identification_details TEXT,
                 base_watering_interval_days INTEGER,
@@ -70,4 +71,9 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        # Migrations
+        cursor = await db.execute("PRAGMA table_info(plants)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "location" not in columns:
+            await db.execute("ALTER TABLE plants ADD COLUMN location TEXT NOT NULL DEFAULT 'indoor'")
         await db.commit()

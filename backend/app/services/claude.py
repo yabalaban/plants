@@ -69,11 +69,12 @@ async def _run_claude_cli(
     image_path: str | None = None,
     schema: str | None = None,
 ) -> str:
-    cmd = ["claude", "-p", prompt, "--output-format", "text"]
+    output_format = "json" if schema else "text"
+    cmd = ["claude", "-p", prompt, "--output-format", output_format]
     if image_path:
         abs_path = os.path.abspath(image_path)
         prompt = f"Read the image file at {abs_path} and then:\n\n{prompt}"
-        cmd = ["claude", "-p", prompt, "--output-format", "text",
+        cmd = ["claude", "-p", prompt, "--output-format", output_format,
                "--add-dir", os.path.dirname(abs_path)]
     if schema:
         cmd.extend(["--json-schema", schema])
@@ -95,7 +96,12 @@ async def _run_claude_cli(
         error = stderr.decode()
         await _log_call(task, prompt, None, error, duration_ms)
         raise RuntimeError(f"Claude CLI failed: {error}")
-    result = stdout.decode().strip()
+    raw = stdout.decode().strip()
+    if schema:
+        envelope = json.loads(raw)
+        result = json.dumps(envelope.get("structured_output") or envelope.get("result", ""))
+    else:
+        result = raw
     await _log_call(task, prompt, result, None, duration_ms)
     return result
 

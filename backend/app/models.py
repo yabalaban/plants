@@ -20,6 +20,7 @@ class PlantResponse(BaseModel):
     id: int
     name: str
     species: str | None
+    location: str
     photo_path: str
     identification_details: PlantIdentification | None
     base_watering_interval_days: int | None
@@ -27,6 +28,11 @@ class PlantResponse(BaseModel):
     interval_days: float | None = None
     next_watering: str | None = None
     adjustment_reason: str | None = None
+
+
+class PlantUpdate(BaseModel):
+    name: str | None = None
+    location: str | None = None
 
 
 class PlantDetailResponse(PlantResponse):

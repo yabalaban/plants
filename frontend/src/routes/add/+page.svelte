@@ -3,6 +3,7 @@
     import { addPlant } from '$lib/api';
 
     let name = $state('');
+    let location = $state<'indoor' | 'balcony'>('indoor');
     let photo = $state<File | null>(null);
     let preview = $state<string | null>(null);
     let loading = $state(false);
@@ -26,7 +27,7 @@
         loading = true;
         error = null;
         try {
-            const plant = await addPlant(name.trim(), photo);
+            const plant = await addPlant(name.trim(), photo, location);
             goto(`/plants/${plant.id}`);
         } catch (e) {
             error = 'Failed to add plant. Please try again.';
@@ -85,6 +86,18 @@
                 bind:value={name}
                 disabled={loading}
             />
+        </div>
+
+        <div class="field">
+            <span class="field-label">Location</span>
+            <div class="toggle-group">
+                <button type="button" class="toggle-option" class:active={location === 'indoor'} onclick={() => location = 'indoor'} disabled={loading}>
+                    Indoor
+                </button>
+                <button type="button" class="toggle-option" class:active={location === 'balcony'} onclick={() => location = 'balcony'} disabled={loading}>
+                    Balcony
+                </button>
+            </div>
         </div>
 
         {#if error}
@@ -208,6 +221,20 @@
         color: var(--text-muted);
         text-transform: uppercase;
         letter-spacing: 0.05em;
+    }
+
+    .toggle-group {
+        display: flex; gap: 0.5rem;
+    }
+    .toggle-option {
+        flex: 1; padding: 0.7rem; border-radius: var(--radius-sm);
+        background: var(--surface); border: 1.5px solid var(--border);
+        font-weight: 600; font-size: 0.875rem; color: var(--text-muted);
+        transition: all 0.15s;
+    }
+    .toggle-option.active {
+        border-color: var(--accent); color: var(--accent);
+        background: var(--accent-dim);
     }
 
     .error-msg {

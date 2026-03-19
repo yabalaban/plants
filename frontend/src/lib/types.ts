@@ -12,6 +12,7 @@ export interface Plant {
     id: number;
     name: string;
     species: string | null;
+    location: string;
     photo_path: string;
     identification_details: PlantIdentification | null;
     base_watering_interval_days: number | null;

@@ -24,6 +24,15 @@
         });
     }
 
+    function todayStr(): string {
+        const d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    function isForecast(date: string): boolean {
+        return date > todayStr();
+    }
+
     function tryParseJson(s: string): string {
         try {
             return JSON.stringify(JSON.parse(s), null, 2);
@@ -122,8 +131,13 @@
         {:else}
             <div class="weather-list">
                 {#each weather as w}
-                    <div class="weather-row">
-                        <span class="weather-date">{w.date}</span>
+                    <div class="weather-row" class:forecast={isForecast(w.date)}>
+                        <span class="weather-date">
+                            {w.date}
+                            {#if isForecast(w.date)}
+                                <span class="forecast-badge">forecast</span>
+                            {/if}
+                        </span>
                         <div class="weather-stats">
                             {#if w.temp_high != null}
                                 <span class="weather-stat" title="High">
@@ -251,4 +265,12 @@
     .stat-icon.hot { color: var(--alert); }
     .stat-icon.cold { color: var(--info); }
     .weather-stat.rain { color: var(--info); }
+    .weather-row.forecast { opacity: 0.65; border-style: dashed; }
+    .forecast-badge {
+        font-size: 0.55rem; padding: 0.1rem 0.35rem; border-radius: 999px;
+        background: var(--info-dim, rgba(123, 168, 201, 0.1)); color: var(--info);
+        border: 1px solid rgba(123, 168, 201, 0.2);
+        font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+        margin-left: 0.4rem; vertical-align: middle;
+    }
 </style>

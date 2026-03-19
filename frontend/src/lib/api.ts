@@ -15,13 +15,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export async function getPlants(): Promise<Plant[]> { return request('/plants'); }
 export async function getPlant(id: number): Promise<PlantDetail> { return request(`/plants/${id}`); }
 
-export async function addPlant(name: string, photo: File): Promise<Plant> {
+export async function addPlant(name: string, photo: File, location: string = 'indoor'): Promise<Plant> {
     const form = new FormData();
     form.append('name', name);
+    form.append('location', location);
     form.append('photo', photo);
     const resp = await fetch(`${BASE}/plants`, { method: 'POST', body: form });
     if (!resp.ok) throw new Error(`API error: ${resp.status}`);
     return resp.json();
+}
+
+export async function updatePlant(id: number, data: { name?: string; location?: string }): Promise<Plant> {
+    return request(`/plants/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
 export async function waterPlant(id: number, notes?: string): Promise<void> {

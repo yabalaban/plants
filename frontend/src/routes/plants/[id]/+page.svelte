@@ -2,28 +2,57 @@
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getPlant, waterPlant, deletePlant } from '$lib/api';
+    import { getPlant, waterPlant, deletePlant, updatePlant } from '$lib/api';
     import type { PlantDetail } from '$lib/types';
 
     let plant = $state<PlantDetail | null>(null);
     let loading = $state(true);
     let error = $state<string | null>(null);
     let watering = $state(false);
+    let saving = $state(false);
     let deleting = $state(false);
     let showDeleteConfirm = $state(false);
     let waterNotes = $state('');
     let showNotesInput = $state(false);
+    let editName = $state('');
+    let editLocation = $state<'indoor' | 'balcony'>('indoor');
+    let saveMessage = $state<{ text: string; type: 'success' | 'error' } | null>(null);
 
     let id = $derived(Number($page.params.id));
+
+    let hasChanges = $derived(
+        plant != null && (editName !== plant.name || editLocation !== plant.location)
+    );
 
     async function load() {
         try {
             loading = true;
             plant = await getPlant(id);
+            editName = plant.name;
+            editLocation = plant.location as 'indoor' | 'balcony';
         } catch {
             error = 'Failed to load plant';
         } finally {
             loading = false;
+        }
+    }
+
+    async function handleSave() {
+        if (!plant || !hasChanges || saving) return;
+        saving = true;
+        try {
+            const updates: Record<string, string> = {};
+            if (editName !== plant.name) updates.name = editName.trim();
+            if (editLocation !== plant.location) updates.location = editLocation;
+            await updatePlant(plant.id, updates);
+            await load();
+            saveMessage = { text: 'Saved', type: 'success' };
+            setTimeout(() => { saveMessage = null; }, 2000);
+        } catch {
+            saveMessage = { text: 'Failed to save', type: 'error' };
+            setTimeout(() => { saveMessage = null; }, 3000);
+        } finally {
+            saving = false;
         }
     }
 
@@ -95,7 +124,7 @@
             />
             <div class="hero-gradient"></div>
             <div class="hero-info">
-                <h1 class="plant-name">{plant.name}</h1>
+                <h1 class="plant-name">{editName || plant.name}</h1>
                 {#if plant.species}
                     <p class="plant-species">{plant.species}</p>
                 {/if}
@@ -103,6 +132,32 @@
         </div>
 
         <div class="content">
+            <div class="edit-section">
+                <div class="edit-field">
+                    <label class="edit-label" for="edit-name">Name</label>
+                    <input id="edit-name" type="text" bind:value={editName} class="edit-input" />
+                </div>
+                <div class="edit-field">
+                    <span class="edit-label">Location</span>
+                    <div class="toggle-group">
+                        <button type="button" class="toggle-option" class:active={editLocation === 'indoor'} onclick={() => editLocation = 'indoor'}>Indoor</button>
+                        <button type="button" class="toggle-option" class:active={editLocation === 'balcony'} onclick={() => editLocation = 'balcony'}>Balcony</button>
+                    </div>
+                </div>
+                {#if hasChanges}
+                    <button class="save-btn" onclick={handleSave} disabled={saving || !editName.trim()}>
+                        {#if saving}
+                            <span class="spinner"></span> Saving...
+                        {:else}
+                            Save Changes
+                        {/if}
+                    </button>
+                {/if}
+                {#if saveMessage}
+                    <div class="save-toast {saveMessage.type}" style="animation: fadeIn 0.3s var(--ease-out)">{saveMessage.text}</div>
+                {/if}
+            </div>
+
             <div class="stats-row">
                 <div class="stat">
                     <span class="stat-value">
@@ -319,6 +374,50 @@
 
     /* Content */
     .content { display: flex; flex-direction: column; gap: 1.5rem; padding-top: 0.75rem; }
+
+    /* Edit */
+    .edit-section {
+        display: flex; flex-direction: column; gap: 0.75rem;
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1rem;
+    }
+    .edit-field { display: flex; flex-direction: column; gap: 0.3rem; }
+    .edit-label {
+        font-size: 0.7rem; font-weight: 600; color: var(--text-muted);
+        text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .edit-input {
+        font-size: 0.95rem; padding: 0.6rem 0.75rem;
+        background: var(--bg); border: 1px solid var(--border);
+        border-radius: var(--radius-sm); color: var(--text-primary);
+    }
+    .edit-input:focus { border-color: var(--accent); outline: none; }
+    .toggle-group { display: flex; gap: 0.5rem; }
+    .toggle-option {
+        flex: 1; padding: 0.6rem; border-radius: var(--radius-sm);
+        background: var(--bg); border: 1.5px solid var(--border);
+        font-weight: 600; font-size: 0.8rem; color: var(--text-muted);
+        transition: all 0.15s;
+    }
+    .toggle-option.active {
+        border-color: var(--accent); color: var(--accent);
+        background: var(--accent-dim);
+    }
+    .save-btn {
+        padding: 0.75rem; background: var(--accent); color: var(--bg);
+        border-radius: var(--radius-sm); font-weight: 700; font-size: 0.9rem;
+        display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+        min-height: 44px; transition: transform 0.15s var(--ease-spring);
+        animation: fadeIn 0.2s var(--ease-out);
+    }
+    .save-btn:active { transform: scale(0.97); }
+    .save-btn:disabled { opacity: 0.5; }
+    .save-toast {
+        padding: 0.5rem 0.75rem; border-radius: var(--radius-xs);
+        font-size: 0.8rem; font-weight: 500; text-align: center;
+    }
+    .save-toast.success { background: var(--accent-dim); color: var(--accent); }
+    .save-toast.error { background: var(--danger-dim); color: var(--danger); }
 
     /* Stats */
     .stats-row {

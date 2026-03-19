@@ -21,7 +21,7 @@ async def fetch_weather(latitude: float, longitude: float, days: int = 7) -> lis
     params = {
         "latitude": latitude, "longitude": longitude,
         "daily": "temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean,precipitation_sum",
-        "past_days": days, "forecast_days": 1,
+        "past_days": days, "forecast_days": 3,
     }
     async with httpx.AsyncClient() as client:
         resp = await client.get(WEATHER_URL, params=params)

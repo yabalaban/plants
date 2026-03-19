@@ -48,11 +48,11 @@ async def job_adjust_schedules():
     async with aiosqlite.connect(get_db_path()) as db:
         db.row_factory = aiosqlite.Row
         await db.execute("PRAGMA foreign_keys = ON")
-        cursor = await db.execute("SELECT p.id, p.species, s.interval_days FROM plants p JOIN watering_schedules s ON p.id = s.plant_id WHERE p.species IS NOT NULL")
+        cursor = await db.execute("SELECT p.id, p.species, p.location, s.interval_days FROM plants p JOIN watering_schedules s ON p.id = s.plant_id WHERE p.species IS NOT NULL")
         plants = [dict(row) for row in await cursor.fetchall()]
         if not plants:
             return
-        cursor = await db.execute("SELECT date, temp_high, temp_low, humidity, precipitation_mm FROM weather_cache WHERE date >= date('now', '-7 days') ORDER BY date")
+        cursor = await db.execute("SELECT date, temp_high, temp_low, humidity, precipitation_mm FROM weather_cache WHERE date >= date('now', '-7 days') AND date <= date('now', '+3 days') ORDER BY date")
         weather = [dict(row) for row in await cursor.fetchall()]
         if not weather:
             return

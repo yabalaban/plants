@@ -85,9 +85,10 @@ async def add_plant(
         content = await photo.read()
         f.write(content)
 
+    web_path = f"/photos/{filename}"
     cursor = await db.execute(
         "INSERT INTO plants (name, photo_path) VALUES (?, ?)",
-        (name, filepath),
+        (name, web_path),
     )
     await db.commit()
     plant_id = cursor.lastrowid
@@ -173,8 +174,13 @@ async def delete_plant(plant_id: int, db: aiosqlite.Connection = Depends(get_db)
     if not row:
         raise HTTPException(status_code=404, detail="Plant not found")
 
-    if row["photo_path"] and os.path.exists(row["photo_path"]):
-        os.remove(row["photo_path"])
+    if row["photo_path"]:
+        photo_path = row["photo_path"]
+        # Translate web path (/photos/filename) to filesystem path
+        if photo_path.startswith("/photos/"):
+            photo_path = os.path.join(_get_photo_dir(), os.path.basename(photo_path))
+        if os.path.exists(photo_path):
+            os.remove(photo_path)
 
     await db.execute("DELETE FROM plants WHERE id = ?", (plant_id,))
     await db.commit()

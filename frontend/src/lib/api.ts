@@ -29,6 +29,14 @@ export async function updatePlant(id: number, data: { name?: string; location?: 
     return request(`/plants/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
+export async function updatePlantPhoto(id: number, photo: File): Promise<Plant> {
+    const form = new FormData();
+    form.append('photo', photo);
+    const resp = await fetch(`${BASE}/plants/${id}/photo`, { method: 'POST', body: form });
+    if (!resp.ok) throw new Error(`API error: ${resp.status}`);
+    return resp.json();
+}
+
 export async function waterPlant(id: number, notes?: string): Promise<void> {
     await request(`/plants/${id}/water`, { method: 'POST', body: JSON.stringify({ notes: notes || null }) });
 }

@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getPlant, waterPlant, deletePlant, updatePlant } from '$lib/api';
+    import { getPlant, waterPlant, deletePlant, updatePlant, updatePlantPhoto } from '$lib/api';
     import type { PlantDetail } from '$lib/types';
 
     let plant = $state<PlantDetail | null>(null);
@@ -10,6 +10,8 @@
     let error = $state<string | null>(null);
     let watering = $state(false);
     let saving = $state(false);
+    let retaking = $state(false);
+    let photoInput: HTMLInputElement;
     let deleting = $state(false);
     let showDeleteConfirm = $state(false);
     let waterNotes = $state('');
@@ -53,6 +55,25 @@
             setTimeout(() => { saveMessage = null; }, 3000);
         } finally {
             saving = false;
+        }
+    }
+
+    async function handleRetakePhoto(event: Event) {
+        const input = event.target as HTMLInputElement;
+        const file = input.files?.[0];
+        if (!file || !plant || retaking) return;
+        retaking = true;
+        try {
+            await updatePlantPhoto(plant.id, file);
+            await load();
+            saveMessage = { text: 'Photo updated, checking health...', type: 'success' };
+            setTimeout(() => { saveMessage = null; }, 3000);
+        } catch {
+            saveMessage = { text: 'Failed to update photo', type: 'error' };
+            setTimeout(() => { saveMessage = null; }, 3000);
+        } finally {
+            retaking = false;
+            input.value = '';
         }
     }
 
@@ -117,6 +138,23 @@
                     <path d="M19 12H5M12 19l-7-7 7-7" />
                 </svg>
             </a>
+            <label class="retake-btn" aria-label="Retake photo">
+                {#if retaking}
+                    <span class="spinner-light"></span>
+                {:else}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="retake-icon">
+                        <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                        <circle cx="12" cy="13" r="4" />
+                    </svg>
+                {/if}
+                <input
+                    type="file"
+                    accept="image/*"
+                    onchange={handleRetakePhoto}
+                    class="retake-input"
+                    disabled={retaking}
+                />
+            </label>
             <img
                 class="hero-photo"
                 src={plant.photo_path}
@@ -371,6 +409,26 @@
     }
 
     .back-icon { width: 20px; height: 20px; }
+
+    .retake-btn {
+        position: absolute;
+        top: calc(0.75rem + env(safe-area-inset-top, 0px));
+        right: 0.75rem;
+        z-index: 10;
+        width: 40px; height: 40px; border-radius: 50%;
+        background: rgba(0,0,0,0.4);
+        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        color: white; display: flex; align-items: center; justify-content: center;
+        cursor: pointer;
+    }
+    .retake-icon { width: 18px; height: 18px; }
+    .retake-input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+    .spinner-light {
+        width: 16px; height: 16px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-top-color: white; border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+    }
 
     .hero-photo { width: 100%; height: 100%; object-fit: cover; }
 

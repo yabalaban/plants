@@ -51,14 +51,7 @@ async def _identify_and_update(plant_id: int, photo_path: str):
             """, (plant_id, interval, interval))
             await db.commit()
         # Health check on the same photo
-        health = await check_plant_health(photo_path, identification.get("species"))
-        if health:
-            async with aiosqlite.connect(get_db_path()) as db:
-                await db.execute(
-                    "UPDATE plants SET health_status = ? WHERE id = ?",
-                    (json.dumps(health), plant_id),
-                )
-                await db.commit()
+        await _health_check_and_update(plant_id, photo_path, identification.get("species"))
         # Adjust schedule based on current weather data (if available)
         await job_adjust_schedules()
     except Exception:
@@ -198,6 +191,69 @@ async def update_plant(plant_id: int, body: PlantUpdate, db: aiosqlite.Connectio
     """, (plant_id,))
     row = await cursor.fetchone()
     return _plant_from_row(row)
+
+
+async def _health_check_and_update(plant_id: int, photo_path: str, species: str | None):
+    from app.database import get_db_path
+    try:
+        health = await check_plant_health(photo_path, species)
+        if health:
+            async with aiosqlite.connect(get_db_path()) as db:
+                await db.execute(
+                    "UPDATE plants SET health_status = ? WHERE id = ?",
+                    (json.dumps(health), plant_id),
+                )
+                await db.commit()
+    except Exception:
+        logger.exception("Background health check failed for plant %d", plant_id)
+
+
+@router.post("/{plant_id}/photo", response_model=PlantResponse)
+async def update_photo(
+    plant_id: int,
+    photo: UploadFile = File(...),
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    cursor = await db.execute("SELECT photo_path, species FROM plants WHERE id = ?", (plant_id,))
+    row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Plant not found")
+
+    photo_dir = _get_photo_dir()
+    ext = os.path.splitext(photo.filename or "photo.jpg")[1].lower() or ".jpg"
+    allowed_exts = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+    if ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"Unsupported image format: {ext}")
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join(photo_dir, filename)
+
+    with open(filepath, "wb") as f:
+        content = await photo.read()
+        f.write(content)
+
+    # Delete old photo
+    old_path = row["photo_path"]
+    if old_path and old_path.startswith("/photos/"):
+        old_file = os.path.join(photo_dir, os.path.basename(old_path))
+        if os.path.exists(old_file):
+            os.remove(old_file)
+
+    web_path = f"/photos/{filename}"
+    await db.execute(
+        "UPDATE plants SET photo_path = ?, health_status = NULL WHERE id = ?",
+        (web_path, plant_id),
+    )
+    await db.commit()
+
+    # Trigger health check in background
+    asyncio.create_task(_health_check_and_update(plant_id, filepath, row["species"]))
+
+    cursor = await db.execute("""
+        SELECT p.*, s.interval_days, s.next_watering, s.adjustment_reason
+        FROM plants p LEFT JOIN watering_schedules s ON p.id = s.plant_id
+        WHERE p.id = ?
+    """, (plant_id,))
+    return _plant_from_row(await cursor.fetchone())
 
 
 @router.delete("/{plant_id}", status_code=204)

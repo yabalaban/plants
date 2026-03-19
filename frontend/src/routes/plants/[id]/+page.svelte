@@ -77,7 +77,7 @@
     <div class="detail">
         <img
             class="hero-photo"
-            src="/api/photos/{plant.photo_path.split('/').pop()}"
+            src={plant.photo_path}
             alt={plant.name}
         />
 

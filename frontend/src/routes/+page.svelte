@@ -103,7 +103,7 @@
                 <a href="/plants/{plant.id}" class="plant-card {status}">
                     <img
                         class="photo"
-                        src="/api/photos/{plant.photo_path.split('/').pop()}"
+                        src={plant.photo_path}
                         alt={plant.name}
                     />
                     <div class="info">

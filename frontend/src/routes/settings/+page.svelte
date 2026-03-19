@@ -186,6 +186,14 @@
                     Save Settings
                 {/if}
             </button>
+
+            <a href="/settings/debug" class="debug-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="debug-icon">
+                    <path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                Debug
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="chevron"><path d="M9 18l6-6-6-6"/></svg>
+            </a>
         </form>
     {/if}
 </div>
@@ -310,4 +318,22 @@
         border-radius: 50%;
         animation: spin 0.6s linear infinite;
     }
+
+    .debug-link {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 1rem 1.25rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 0.875rem;
+        font-weight: 500;
+        transition: border-color 0.15s;
+    }
+    .debug-link:hover { border-color: var(--accent-medium); }
+    .debug-icon { width: 18px; height: 18px; }
+    .chevron { width: 16px; height: 16px; margin-left: auto; opacity: 0.4; }
 </style>

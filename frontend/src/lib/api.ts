@@ -1,4 +1,4 @@
-import type { Plant, PlantDetail, Settings, SettingsUpdate } from './types';
+import type { Plant, PlantDetail, Settings, SettingsUpdate, WeatherEntry, ClaudeLog } from './types';
 
 const BASE = '/api';
 
@@ -37,3 +37,6 @@ export async function updateSettings(data: SettingsUpdate): Promise<Settings> {
     return request('/settings', { method: 'PUT', body: JSON.stringify(data) });
 }
 export async function testTelegram(): Promise<void> { await request('/settings/test-telegram', { method: 'POST' }); }
+
+export async function getWeatherCache(): Promise<WeatherEntry[]> { return request('/debug/weather'); }
+export async function getClaudeLogs(): Promise<ClaudeLog[]> { return request('/debug/claude-logs'); }

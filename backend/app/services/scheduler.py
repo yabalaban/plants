@@ -16,11 +16,11 @@ scheduler = AsyncIOScheduler()
 
 async def job_fetch_weather():
     settings = load_settings()
-    if not settings.location.latitude:
+    if not settings.location.city:
         logger.warning("No location configured, skipping weather fetch")
         return
     try:
-        days = await fetch_weather(settings.location.latitude, settings.location.longitude, days=1)
+        days = await fetch_weather(settings.location.latitude, settings.location.longitude, days=7)
     except Exception:
         logger.exception("Weather fetch failed")
         return

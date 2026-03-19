@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from app.database import init_db
-from app.routers import plants, settings_router
+from app.routers import plants, settings_router, debug
 from app.services.scheduler import start_scheduler, stop_scheduler
 
 
@@ -19,6 +19,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Plant Tracker", lifespan=lifespan)
 app.include_router(plants.router)
 app.include_router(settings_router.router)
+app.include_router(debug.router)
 
 
 @app.get("/api/health")

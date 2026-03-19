@@ -46,3 +46,22 @@ export interface SettingsUpdate {
     telegram_chat_id?: string;
     reminder_time?: string;
 }
+
+export interface WeatherEntry {
+    date: string;
+    temp_high: number | null;
+    temp_low: number | null;
+    humidity: number | null;
+    precipitation_mm: number | null;
+    fetched_at: string;
+}
+
+export interface ClaudeLog {
+    id: number;
+    task: string;
+    prompt: string;
+    response: string | null;
+    error: string | null;
+    duration_ms: number;
+    created_at: string;
+}

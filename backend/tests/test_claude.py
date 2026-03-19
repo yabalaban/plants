@@ -1,6 +1,6 @@
 import json
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 from app.services.claude import identify_plant, adjust_schedules
 
 MOCK_IDENTIFICATION = {
@@ -22,13 +22,6 @@ async def test_identify_plant_parses_json():
     assert result["base_watering_interval_days"] == 7
 
 @pytest.mark.asyncio
-async def test_identify_plant_handles_markdown_fenced_json():
-    mock_result = f"```json\n{json.dumps(MOCK_IDENTIFICATION)}\n```"
-    with patch("app.services.claude._run_claude_cli", return_value=mock_result):
-        result = await identify_plant("/tmp/photo.jpg")
-    assert result["species"] == "Monstera deliciosa"
-
-@pytest.mark.asyncio
 async def test_identify_plant_returns_none_on_failure():
     with patch("app.services.claude._run_claude_cli", side_effect=RuntimeError("CLI failed")):
         result = await identify_plant("/tmp/photo.jpg")
@@ -36,9 +29,11 @@ async def test_identify_plant_returns_none_on_failure():
 
 @pytest.mark.asyncio
 async def test_adjust_schedules_returns_adjustments():
-    mock_response = json.dumps([
-        {"plant_id": 1, "interval_days": 5, "reason": "Hot weather this week"}
-    ])
+    mock_response = json.dumps({
+        "adjustments": [
+            {"plant_id": 1, "interval_days": 5, "reason": "Hot weather this week"}
+        ]
+    })
     with patch("app.services.claude._run_claude_cli", return_value=mock_response):
         result = await adjust_schedules(
             plants=[{"id": 1, "species": "Monstera", "interval_days": 7}],
@@ -46,3 +41,9 @@ async def test_adjust_schedules_returns_adjustments():
         )
     assert len(result) == 1
     assert result[0]["interval_days"] == 5
+
+@pytest.mark.asyncio
+async def test_adjust_schedules_returns_empty_on_failure():
+    with patch("app.services.claude._run_claude_cli", side_effect=RuntimeError("CLI failed")):
+        result = await adjust_schedules(plants=[], weather=[])
+    assert result == []

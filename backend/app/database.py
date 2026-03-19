@@ -59,5 +59,15 @@ async def init_db():
                 precipitation_mm REAL,
                 fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS claude_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                response TEXT,
+                error TEXT,
+                duration_ms INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         await db.commit()

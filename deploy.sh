@@ -26,13 +26,14 @@ podman run -d \
   --tmpfs /tmp \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
-  --user 1000:1000 \
+  --userns=keep-id \
   --network pasta:--ipv4-only \
   -p 5757:8472 \
-  -v "$DATA_DIR/db":/data/db:rw,U \
-  -v "$DATA_DIR/photos":/data/photos:rw,U \
-  -v "$DATA_DIR/config":/data/config:rw,U \
+  -v "$DATA_DIR/db":/data/db:rw \
+  -v "$DATA_DIR/photos":/data/photos:rw \
+  -v "$DATA_DIR/config":/data/config:rw \
   -v "$HOME/.claude":/home/app/.claude:ro \
+  -v "$HOME/.claude.json":/home/app/.claude.json:ro \
   -v "$CLAUDE_BIN":/usr/local/bin/claude:ro \
   --secret telegram_bot_token \
   --secret telegram_chat_id \

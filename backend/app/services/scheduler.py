@@ -41,7 +41,7 @@ async def job_send_reminders():
         due_plants = await get_plants_needing_water(db)
     message = format_watering_reminder(due_plants)
     if message:
-        await send_message(settings.telegram.bot_token, settings.telegram.chat_id, message)
+        await send_message(settings.telegram.bot_token, settings.telegram.chat_id, message, parse_mode="MarkdownV2")
 
 
 async def job_adjust_schedules():

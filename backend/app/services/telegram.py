@@ -4,11 +4,14 @@ import httpx
 logger = logging.getLogger(__name__)
 TELEGRAM_API = "https://api.telegram.org"
 
-async def send_message(bot_token: str, chat_id: str, text: str) -> bool:
+async def send_message(bot_token: str, chat_id: str, text: str, parse_mode: str | None = None) -> bool:
     url = f"{TELEGRAM_API}/bot{bot_token}/sendMessage"
+    payload: dict = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "MarkdownV2"})
+            resp = await client.post(url, json=payload)
             resp.raise_for_status()
         return True
     except Exception:
@@ -16,7 +19,7 @@ async def send_message(bot_token: str, chat_id: str, text: str) -> bool:
         return False
 
 def _escape_markdown(text: str) -> str:
-    """Escape Telegram Markdown special characters."""
+    """Escape Telegram MarkdownV2 special characters."""
     for ch in r"\_*[]()~`>#+-=|{}.!":
         text = text.replace(ch, f"\\{ch}")
     return text

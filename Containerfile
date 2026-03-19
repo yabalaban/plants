@@ -37,4 +37,4 @@ EXPOSE 8472
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD curl -sf http://localhost:8472/api/health || exit 1
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8472"]
+CMD ["uv", "run", "--no-dev", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8472"]

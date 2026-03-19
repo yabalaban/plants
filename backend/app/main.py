@@ -26,8 +26,9 @@ async def health():
     return {"status": "ok"}
 
 
-os.makedirs("./photos", exist_ok=True)
-app.mount("/photos", StaticFiles(directory="photos"), name="photos")
+_photo_dir = os.environ.get("PLANTS_PHOTO_DIR", "./photos")
+os.makedirs(_photo_dir, exist_ok=True)
+app.mount("/photos", StaticFiles(directory=_photo_dir), name="photos")
 
 _frontend_dir = os.environ.get("PLANTS_FRONTEND_DIR", "../frontend/build")
 if os.path.isdir(_frontend_dir):

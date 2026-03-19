@@ -27,10 +27,11 @@ podman run -d \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
   --user 1000:1000 \
-  -p 8472:8472 \
-  -v "$DATA_DIR/db":/data/db:rw \
-  -v "$DATA_DIR/photos":/data/photos:rw \
-  -v "$DATA_DIR/config":/data/config:rw \
+  --network pasta:--ipv4-only \
+  -p 5757:8472 \
+  -v "$DATA_DIR/db":/data/db:rw,U \
+  -v "$DATA_DIR/photos":/data/photos:rw,U \
+  -v "$DATA_DIR/config":/data/config:rw,U \
   -v "$HOME/.claude":/home/app/.claude:ro \
   -v "$CLAUDE_BIN":/usr/local/bin/claude:ro \
   --secret telegram_bot_token \
@@ -40,7 +41,7 @@ podman run -d \
   --restart on-failure:3 \
   "$IMAGE"
 
-echo "Plant tracker running on port 8472"
+echo "Plant tracker running on port 5757"
 echo "Logs:   podman logs -f $NAME"
 echo "Stop:   podman stop $NAME"
 echo "Health: podman healthcheck run $NAME"

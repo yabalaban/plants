@@ -60,7 +60,7 @@ podman build -t plant-tracker:latest .
 ./deploy.sh
 ```
 
-Container runs on port **8472** with: rootless Podman, read-only filesystem, all capabilities dropped, non-root user, no-new-privileges, Podman secrets for Telegram.
+Container runs internally on port 8472, mapped to host port **5757**. Security: rootless Podman, read-only filesystem, all capabilities dropped, non-root user, no-new-privileges, Podman secrets for Telegram.
 
 ### Data lives on the host
 
@@ -100,7 +100,7 @@ podman logs --since 1h plant-tracker   # last hour only
 ```bash
 podman healthcheck run plant-tracker
 # or directly:
-curl -s http://localhost:8472/api/health
+curl -s http://localhost:5757/api/health
 ```
 
 ### Restart the container
@@ -259,7 +259,7 @@ Photos are served at `/photos/{filename}` via StaticFiles. Check:
 podman logs plant-tracker
 
 # Common: port already in use
-podman ps -a | grep 8472
+podman ps -a | grep 5757
 # Kill conflicting container or change port in deploy.sh
 
 # Common: secrets not created

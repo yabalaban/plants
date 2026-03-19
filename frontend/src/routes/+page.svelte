@@ -30,11 +30,11 @@
         const next = new Date(dateStr);
         next.setHours(0, 0, 0, 0);
         const diff = Math.floor((next.getTime() - today.getTime()) / 86400000);
-        if (diff < -1) return `${Math.abs(diff)} days overdue`;
-        if (diff === -1) return '1 day overdue';
-        if (diff === 0) return 'Due today';
-        if (diff === 1) return 'in 1 day';
-        return `in ${diff} days`;
+        if (diff < -1) return `${Math.abs(diff)}d overdue`;
+        if (diff === -1) return '1d overdue';
+        if (diff === 0) return 'Today';
+        if (diff === 1) return 'Tomorrow';
+        return `${diff} days`;
     }
 
     function statusOrder(status: string): number {
@@ -83,52 +83,84 @@
 </script>
 
 <div class="dashboard">
-    <div class="header">
-        <p class="date">{todayStr}</p>
-        <h1 class="title">My Plants</h1>
+    <header class="hero">
+        <p class="greeting">{todayStr}</p>
+        <h1 class="title">Your Garden</h1>
         {#if !loading && needsWaterCount > 0}
-            <p class="needs-water">{needsWaterCount} plant{needsWaterCount > 1 ? 's' : ''} need water</p>
+            <div class="alert-pill">
+                <span class="alert-dot"></span>
+                {needsWaterCount} plant{needsWaterCount > 1 ? 's' : ''} need{needsWaterCount === 1 ? 's' : ''} water
+            </div>
         {/if}
-    </div>
+    </header>
 
     {#if loading}
-        <div class="state-box">Loading plants...</div>
+        <div class="skeleton-list">
+            {#each [1, 2, 3] as _}
+                <div class="skeleton-card"></div>
+            {/each}
+        </div>
     {:else if error}
-        <div class="state-box error">{error}</div>
+        <div class="message-box error">{error}</div>
     {:else if plants.length === 0}
-        <div class="empty-state">
-            <span class="empty-icon">🌱</span>
-            <p>No plants yet</p>
-            <a href="/add" class="add-link">Add your first plant</a>
+        <div class="empty">
+            <div class="empty-illustration">
+                <svg viewBox="0 0 80 80" fill="none" class="empty-svg">
+                    <circle cx="40" cy="60" rx="20" ry="6" fill="var(--accent-dim)" />
+                    <path d="M40 55V35" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" />
+                    <path d="M40 35c-8-12-20-8-18 0s18 8 18 0z" fill="var(--accent-dim)" stroke="var(--accent)" stroke-width="1.5" />
+                    <path d="M40 42c8-14 22-10 18 0s-18 6-18 0z" fill="var(--accent-dim)" stroke="var(--accent)" stroke-width="1.5" />
+                </svg>
+            </div>
+            <p class="empty-text">No plants yet</p>
+            <a href="/add" class="empty-cta">Add your first plant</a>
         </div>
     {:else}
-        <div class="plant-list">
-            {#each sorted as plant (plant.id)}
+        <div class="plant-grid">
+            {#each sorted as plant, i (plant.id)}
                 {@const status = getStatus(plant)}
-                <a href="/plants/{plant.id}" class="plant-card {status}">
-                    <img
-                        class="photo"
-                        src={plant.photo_path}
-                        alt={plant.name}
-                    />
-                    <div class="info">
-                        <p class="name">{plant.name}</p>
-                        <p class="species">{plant.species ?? 'Identifying...'}</p>
-                        {#if plant.next_watering}
-                            <p class="watering-label {status}">{daysUntil(plant.next_watering)}</p>
-                        {:else}
-                            <p class="watering-label unscheduled">Not scheduled</p>
+                <a
+                    href="/plants/{plant.id}"
+                    class="plant-card {status}"
+                    style="animation-delay: {i * 60}ms"
+                >
+                    <div class="card-photo-wrap">
+                        <img
+                            class="card-photo"
+                            src={plant.photo_path}
+                            alt={plant.name}
+                            loading="lazy"
+                        />
+                        {#if status === 'overdue' || status === 'due'}
+                            <button
+                                class="card-water-btn"
+                                onclick={(e) => handleWater(plant, e)}
+                                disabled={watering.has(plant.id)}
+                                aria-label="Water {plant.name}"
+                            >
+                                {#if watering.has(plant.id)}
+                                    <span class="btn-spinner"></span>
+                                {:else}
+                                    <svg viewBox="0 0 24 24" fill="currentColor" class="water-icon">
+                                        <path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0L12 2.69z" />
+                                    </svg>
+                                {/if}
+                            </button>
                         {/if}
                     </div>
-                    {#if status === 'overdue' || status === 'due'}
-                        <button
-                            class="water-btn"
-                            onclick={(e) => handleWater(plant, e)}
-                            disabled={watering.has(plant.id)}
-                        >
-                            {watering.has(plant.id) ? '...' : '💧'}
-                        </button>
-                    {/if}
+                    <div class="card-body">
+                        <p class="card-name">{plant.name}</p>
+                        <p class="card-species">{plant.species ?? 'Identifying...'}</p>
+                        <div class="card-status {status}">
+                            {#if plant.next_watering}
+                                <span class="status-dot"></span>
+                                {daysUntil(plant.next_watering)}
+                            {:else}
+                                <span class="status-dot"></span>
+                                Pending
+                            {/if}
+                        </div>
+                    </div>
                 </a>
             {/each}
         </div>
@@ -136,62 +168,230 @@
 </div>
 
 <style>
-    .dashboard { display: flex; flex-direction: column; gap: 1.5rem; }
+    .dashboard {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        animation: fadeIn 0.4s var(--ease-out);
+    }
 
-    .header { display: flex; flex-direction: column; gap: 0.25rem; }
-    .date { color: var(--text-muted); font-size: 0.85rem; }
-    .title { font-size: 1.6rem; font-weight: 700; }
-    .needs-water { color: var(--yellow); font-size: 0.85rem; }
+    .hero {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        padding-bottom: 0.5rem;
+    }
 
-    .state-box { padding: 2rem; text-align: center; color: var(--text-muted); background: var(--surface); border-radius: var(--radius); }
-    .state-box.error { color: var(--red); }
+    .greeting {
+        font-family: var(--font-body);
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        font-weight: 500;
+    }
 
-    .empty-state { display: flex; flex-direction: column; align-items: center; gap: 1rem; padding: 3rem 1rem; }
-    .empty-icon { font-size: 3rem; }
-    .empty-state p { color: var(--text-muted); }
-    .add-link { color: var(--green); text-decoration: none; font-weight: 600; }
+    .title {
+        font-family: var(--font-display);
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text);
+    }
 
-    .plant-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .alert-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.35rem;
+        padding: 0.4rem 0.85rem;
+        background: var(--alert-dim);
+        border: 1px solid rgba(232, 168, 124, 0.2);
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--alert);
+        width: fit-content;
+    }
+
+    .alert-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--alert);
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    /* Skeleton */
+    .skeleton-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .skeleton-card {
+        height: 88px;
+        border-radius: var(--radius);
+        background: var(--surface);
+        animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .message-box {
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.875rem;
+        text-align: center;
+    }
+    .message-box.error {
+        background: var(--danger-dim);
+        color: var(--danger);
+        border: 1px solid rgba(201, 123, 123, 0.2);
+    }
+
+    /* Empty */
+    .empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding: 4rem 1rem 2rem;
+        animation: fadeInScale 0.5s var(--ease-out);
+    }
+
+    .empty-svg { width: 80px; height: 80px; }
+    .empty-text { color: var(--text-secondary); font-size: 0.95rem; }
+    .empty-cta {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.7rem 1.5rem;
+        background: var(--accent-dim);
+        color: var(--accent);
+        border: 1px solid var(--accent-medium);
+        border-radius: 999px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 0.875rem;
+        transition: background 0.2s;
+    }
+
+    /* Plant Grid */
+    .plant-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
 
     .plant-card {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 0.875rem;
         padding: 0.75rem;
         background: var(--surface);
         border-radius: var(--radius);
         border: 1px solid var(--border);
         text-decoration: none;
         color: inherit;
-        transition: border-color 0.15s;
+        transition: transform 0.2s var(--ease-out), border-color 0.2s, background 0.2s;
+        animation: fadeIn 0.4s var(--ease-out) both;
     }
-    .plant-card.overdue { border-color: rgba(239, 68, 68, 0.3); background: var(--red-bg); }
-    .plant-card.due { border-color: rgba(250, 204, 21, 0.3); background: var(--yellow-bg); }
 
-    .photo { width: 56px; height: 56px; border-radius: var(--radius-sm); object-fit: cover; flex-shrink: 0; background: var(--border); }
+    .plant-card:active {
+        transform: scale(0.98);
+    }
 
-    .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
-    .name { font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .species { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .plant-card.overdue {
+        border-color: rgba(201, 123, 123, 0.25);
+        background: var(--danger-dim);
+    }
+    .plant-card.due {
+        border-color: rgba(232, 168, 124, 0.25);
+        background: var(--alert-dim);
+    }
 
-    .watering-label { font-size: 0.75rem; font-weight: 500; }
-    .watering-label.overdue { color: var(--red); }
-    .watering-label.due { color: var(--yellow); }
-    .watering-label.upcoming { color: var(--green); }
-    .watering-label.unscheduled { color: var(--text-muted); }
-
-    .water-btn {
+    .card-photo-wrap {
+        position: relative;
         flex-shrink: 0;
-        width: 40px;
-        height: 40px;
+    }
+
+    .card-photo {
+        width: 64px;
+        height: 64px;
+        border-radius: var(--radius-sm);
+        object-fit: cover;
+        background: var(--surface-raised);
+    }
+
+    .card-water-btn {
+        position: absolute;
+        bottom: -4px;
+        right: -4px;
+        width: 32px;
+        height: 32px;
         border-radius: 50%;
-        background: var(--blue-bg);
-        border: 1px solid var(--blue);
-        font-size: 1.1rem;
+        background: var(--accent);
+        color: var(--bg);
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: opacity 0.15s;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        transition: transform 0.15s var(--ease-spring);
     }
-    .water-btn:disabled { opacity: 0.5; }
+
+    .card-water-btn:active { transform: scale(0.85); }
+    .card-water-btn:disabled { opacity: 0.6; }
+
+    .water-icon { width: 16px; height: 16px; }
+
+    .btn-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(0,0,0,0.15);
+        border-top-color: var(--bg);
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+    }
+
+    .card-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+    }
+
+    .card-name {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 1.05rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .card-species {
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-style: italic;
+    }
+
+    .card-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        margin-top: 0.2rem;
+    }
+
+    .status-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .card-status.overdue { color: var(--danger); }
+    .card-status.due { color: var(--alert); }
+    .card-status.upcoming { color: var(--accent); }
+    .card-status.unscheduled { color: var(--text-muted); }
 </style>

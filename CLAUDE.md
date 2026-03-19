@@ -2,13 +2,14 @@
 
 ## Project Overview
 
-Personal plant care PWA. FastAPI backend + SvelteKit frontend + SQLite. Hosted on Raspberry Pi, accessed via VPN (plain HTTP). Single user, no auth.
+Personal plant care PWA. FastAPI backend + SvelteKit frontend + SQLite. Deployed on Raspberry Pi in a rootless Podman container, accessed via VPN (plain HTTP). Single user, no auth.
 
 ## Tooling
 
 - **Python deps**: always use `uv` (never pip/venv directly)
 - **Tool versions**: managed by `mise` (Python 3.12, Node 22, uv)
 - **If uv is missing**: install via `mise install`
+- **Container runtime**: Podman (rootless), NOT Docker
 
 ## Architecture
 
@@ -17,7 +18,7 @@ backend/app/
 ├── main.py              # FastAPI app, lifespan, static serving, SPA fallback
 ├── database.py          # SQLite init + async connection (aiosqlite)
 ├── models.py            # Pydantic request/response models
-├── settings.py          # settings.json read/write
+├── settings.py          # settings.json read/write + Podman secrets (/run/secrets/)
 ├── routers/
 │   ├── plants.py        # CRUD + photo upload + background identification
 │   └── settings_router.py  # Settings API + Telegram test
@@ -27,20 +28,21 @@ backend/app/
     ├── telegram.py       # Telegram Bot API (MarkdownV2 for reminders, plain for test)
     ├── scheduler.py      # APScheduler: weather fetch, reminders, schedule adjustment
     └── watering.py       # Due/overdue calculation
+
+Deployment files:
+├── Containerfile         # Multi-stage: Node builds frontend, Python slim runtime
+├── .containerignore      # Keeps image lean (~150MB)
+├── deploy.sh            # One-command deploy with security hardening
 ```
 
 Frontend is SvelteKit compiled to static files, served by FastAPI's catch-all route.
 
-## Running
+## Running Locally (Dev)
 
 ```bash
-# Dev (two terminals)
+# Two terminals
 cd backend && uv run uvicorn app.main:app --reload --port 8000
 cd frontend && npm run dev   # Vite proxies /api and /photos to :8000
-
-# Production
-cd frontend && npm run build
-cd backend && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ## Tests
@@ -49,14 +51,159 @@ cd backend && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 cd backend && uv run pytest -v   # 31 tests
 ```
 
+## Container Deployment (Production)
+
+### Build and deploy
+
+```bash
+podman build -t plant-tracker:latest .
+./deploy.sh
+```
+
+Container runs on port **8472** with: rootless Podman, read-only filesystem, all capabilities dropped, non-root user, no-new-privileges, Podman secrets for Telegram.
+
+### Data lives on the host
+
+```
+~/plant-data/
+├── db/plants.db         # SQLite database
+├── photos/              # Uploaded plant photos
+└── config/settings.json # Non-secret config (city, reminder time)
+```
+
+Secrets (Telegram token, chat ID) are stored via `podman secret` — NOT in settings.json or env vars.
+
+### Container environment variables
+
+| Variable | Container default | Description |
+|----------|------------------|-------------|
+| `PLANTS_DB_PATH` | `/data/db/plants.db` | SQLite database path |
+| `PLANTS_SETTINGS_PATH` | `/data/config/settings.json` | Settings file path |
+| `PLANTS_PHOTO_DIR` | `/data/photos` | Photo storage directory |
+| `PLANTS_FRONTEND_DIR` | `/app/frontend/build` | Compiled frontend path |
+| `CLAUDE_CLI_TIMEOUT` | `120` | Timeout in seconds for Claude CLI calls |
+| `UV_NO_CACHE` | `1` | Prevents uv cache writes on read-only rootfs |
+
+---
+
+## Runbook: Common Operations
+
+### View logs
+
+```bash
+podman logs -f plant-tracker
+podman logs --since 1h plant-tracker   # last hour only
+```
+
+### Check health
+
+```bash
+podman healthcheck run plant-tracker
+# or directly:
+curl -s http://localhost:8472/api/health
+```
+
+### Restart the container
+
+```bash
+podman restart plant-tracker
+```
+
+### Code change → rebuild → redeploy
+
+```bash
+cd ~/plants
+git pull
+podman build -t plant-tracker:latest .
+./deploy.sh    # stops old container, starts new one
+```
+
+### Backend-only change (no frontend rebuild needed)
+
+Same as above — the multi-stage build caches the frontend layer if `frontend/` hasn't changed. Rebuild is fast (~20s).
+
+### Frontend-only change
+
+Same as above — Node stage rebuilds but Python stage is cached. Still fast.
+
+### Update Telegram secrets
+
+```bash
+# Remove old, create new
+podman secret rm telegram_bot_token
+echo "NEW_TOKEN" | podman secret create telegram_bot_token -
+./deploy.sh   # restart to pick up new secret
+```
+
+### Change reminder time or city
+
+Open the app → Settings → change value → Save. Takes effect on next scheduler tick. For reminder time specifically, you need to restart the container (scheduler reads it once at startup):
+
+```bash
+podman restart plant-tracker
+```
+
+### Back up all data
+
+```bash
+cp -r ~/plant-data ~/plant-data-backup-$(date +%Y%m%d)
+```
+
+### Restore from backup
+
+```bash
+podman stop plant-tracker
+cp -r ~/plant-data-backup-YYYYMMDD/* ~/plant-data/
+podman start plant-tracker
+```
+
+### Check if container auto-starts on boot
+
+```bash
+systemctl --user status plant-tracker
+# If not set up yet:
+mkdir -p ~/.config/systemd/user
+podman generate systemd --name plant-tracker --new \
+  > ~/.config/systemd/user/plant-tracker.service
+systemctl --user enable plant-tracker
+loginctl enable-linger $USER
+```
+
+### Reset a stuck "Identifying..." plant
+
+The plant was saved but Claude CLI failed during identification. Options:
+1. Delete and re-add the plant through the UI
+2. Or check why Claude CLI failed:
+   ```bash
+   # Test Claude CLI works inside the container
+   podman exec plant-tracker claude -p "say hello" --output-format text
+
+   # If it hangs or errors, the host CLI auth may need refreshing:
+   claude -p "say hello"   # run on host, re-auth if prompted
+   ```
+
+### Inspect the SQLite database
+
+```bash
+sqlite3 ~/plant-data/db/plants.db
+.tables
+SELECT id, name, species FROM plants;
+SELECT * FROM watering_schedules;
+.quit
+```
+
+---
+
 ## Key Design Decisions
 
-- **Claude CLI** invoked as subprocess (`claude -p`), not the SDK. Image paths are embedded in the prompt text — Claude uses its built-in Read tool to view them.
+- **Claude CLI** invoked as subprocess (`claude -p`), not the SDK. Image paths are embedded in the prompt text — Claude uses its built-in Read tool to view them. 120s timeout prevents hangs.
 - **Photos** stored on filesystem, DB holds web path (`/photos/filename`). Served via StaticFiles mount.
 - **SPA routing**: FastAPI catch-all route at `/{path:path}` serves static files or falls back to `index.html`. This is why `/plants/1` works — it's not a real file, it's the SPA.
-- **Telegram** uses MarkdownV2 for watering reminders (plant names are escaped), plain text for test messages.
+- **Telegram** uses MarkdownV2 for watering reminders (plant names are escaped), plain text for test messages. `send_message()` takes optional `parse_mode` param.
 - **LLM output validation**: interval clamped to 0.5-90 days, plant_id verified against DB before writes.
-- **Background identification**: `asyncio.create_task` with full try/except + logging. Checks plant still exists before writing (handles race with quick delete). 120s timeout on CLI subprocess.
+- **Background identification**: `asyncio.create_task` with full try/except + logging. Checks plant still exists before writing (handles race with quick delete).
+- **Secrets**: `settings.py` reads from `/run/secrets/` first (Podman secrets), falls back to `settings.json`. In container mode, Telegram creds come from secrets only.
+- **Security**: rootless Podman, non-root container user, read-only rootfs, cap-drop ALL, no-new-privileges, RO Claude mount.
 
 ## Common Issues & Debugging
 
@@ -65,13 +212,14 @@ cd backend && uv run pytest -v   # 31 tests
 The background `_identify_and_update` task failed or timed out. Check:
 
 ```bash
-# Is Claude CLI working?
-claude -p "say hello" --output-format text
+# Container logs
+podman logs --since 5m plant-tracker | grep -i "identif\|claude\|failed\|timeout"
 
-# Check server logs for the error
-journalctl -u plant-tracker --since "5 min ago"
-# or if running manually, check terminal output for:
-#   "Plant identification failed" or "Claude CLI timed out"
+# Is Claude CLI working inside the container?
+podman exec plant-tracker claude -p "say hello" --output-format text
+
+# Is Claude CLI working on the host?
+claude -p "say hello" --output-format text
 ```
 
 The plant is saved to DB immediately (with `species=NULL`). Identification runs async. If it fails, the plant stays with "Identifying..." forever. To retry, delete and re-add the plant.
@@ -79,15 +227,16 @@ The plant is saved to DB immediately (with `species=NULL`). Identification runs 
 ### Photos not loading
 
 Photos are served at `/photos/{filename}` via StaticFiles. Check:
-- Photo file exists in the `photos/` directory (relative to where uvicorn runs)
+- Photo file exists: `ls ~/plant-data/photos/`
 - DB stores web path (`/photos/abc.jpg`), not filesystem path
+- Container mount is correct: `podman inspect plant-tracker | grep -A2 photos`
 - In dev: Vite proxy must be running (`vite.config.ts` proxies `/photos` to backend)
 
 ### Weather/geocoding not working
 
 `weather.py` uses `httpx` async client. Common issues:
-- `resp.json()` is sync (NOT `await resp.json()`) — this was a bug that was fixed
-- Network unreachable on RPi — check DNS/connectivity
+- `resp.json()` is sync (NOT `await resp.json()`) — this was a past bug, now fixed
+- Network unreachable in container — check DNS: `podman exec plant-tracker curl -s https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&daily=temperature_2m_max`
 - Open-Meteo may rate-limit aggressive requests
 
 ### Telegram test fails
@@ -95,22 +244,28 @@ Photos are served at `/photos/{filename}` via StaticFiles. Check:
 - Test message uses plain text (no parse_mode). Watering reminders use MarkdownV2.
 - If 400 error: check bot token is valid, chat ID is correct
 - Get your chat ID: message your bot, then `curl https://api.telegram.org/bot<TOKEN>/getUpdates`
+- Verify secrets are mounted: `podman exec plant-tracker cat /run/secrets/telegram_bot_token`
 
 ### Scheduler not firing
 
-- Reminder time is read once at startup. Changing it in settings requires server restart.
+- Reminder time is read once at startup. Changing it in settings requires `podman restart plant-tracker`.
 - Weather fetch: daily at 06:00. Reminders: daily at configured time. Schedule adjustment: Monday 07:00.
 - Logs: `INFO "Scheduler started with 3 jobs"` on startup
 
-## Environment Variables
+### Container won't start
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PLANTS_DB_PATH` | `plants.db` | SQLite database path |
-| `PLANTS_SETTINGS_PATH` | `settings.json` | Settings file path |
-| `PLANTS_PHOTO_DIR` | `./photos` | Photo storage directory |
-| `PLANTS_FRONTEND_DIR` | `../frontend/build` | Compiled frontend path |
-| `CLAUDE_CLI_TIMEOUT` | `120` | Timeout in seconds for Claude CLI calls |
+```bash
+# Check what went wrong
+podman logs plant-tracker
+
+# Common: port already in use
+podman ps -a | grep 8472
+# Kill conflicting container or change port in deploy.sh
+
+# Common: secrets not created
+podman secret ls
+# Should show telegram_bot_token and telegram_chat_id
+```
 
 ## Svelte 5
 

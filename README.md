@@ -2,15 +2,15 @@
 
 Personal plant care PWA with AI-powered identification and weather-adaptive watering schedules.
 
-Upload a photo of your plant, Claude identifies the species and sets up a watering schedule that adjusts based on your local weather. Get daily reminders via Telegram.
+Upload a photo of your plant, Claude identifies the species and sets up a watering schedule that adjusts based on your local weather. Get daily reminders via Telegram (delivered by Rick Sanchez).
 
 ## Stack
 
 - **Backend:** FastAPI, SQLite, APScheduler
 - **Frontend:** SvelteKit (static PWA)
-- **AI:** Claude CLI (plant identification + schedule adjustment)
-- **Weather:** Open-Meteo (free, no API key)
-- **Notifications:** Telegram Bot API
+- **AI:** Claude CLI with structured output (`--json-schema`)
+- **Weather:** Open-Meteo (free, no API key) — 7 days history + 3 day forecast
+- **Notifications:** Telegram Bot API (Rick and Morty themed)
 
 ## Prerequisites
 
@@ -58,18 +58,37 @@ Vite proxies `/api` and `/photos` to the backend automatically.
 
 On first run, go to Settings in the app and configure:
 
-1. **Location** - your city (for weather-based schedule adjustments)
-2. **Telegram Bot Token** - from @BotFather
-3. **Telegram Chat ID** - your personal chat ID
-4. **Reminder Time** - when to receive daily watering reminders
+1. **Location** — your city (for weather-based schedule adjustments)
+2. **Telegram Bot Token** — from @BotFather
+3. **Telegram Chat ID** — your personal chat ID
+4. **Reminder Time** — when to receive daily watering reminders
+
+When adding a plant, choose **Indoor** or **Balcony** — this affects how temperature data is factored into watering adjustments. You can change the location and name anytime from the plant detail page.
 
 ## Background Jobs
 
 | Job | Schedule | Description |
 |-----|----------|-------------|
-| Weather fetch | Daily 06:00 | Fetches local weather from Open-Meteo |
+| Weather fetch | Daily 06:00 | Fetches 7 days history + 3 day forecast from Open-Meteo |
 | Watering reminders | Daily (configurable) | Sends Telegram message for due/overdue plants |
-| Schedule adjustment | Weekly (Monday 07:00) | Claude re-evaluates watering intervals based on weather |
+| Schedule adjustment | Every 3 days at 07:00 | Claude adjusts watering intervals based on weather + plant location |
+
+Schedule adjustment also runs immediately after a new plant is identified, so the first watering interval is weather-aware from the start.
+
+## Debug
+
+Settings → Debug shows:
+
+- **Claude Logs** — every Claude CLI call with prompt, response, duration, and errors
+- **Weather Cache** — cached weather data with forecast days marked
+
+Manual triggers are available via the debug API:
+
+```bash
+curl -X POST http://<host>:5757/api/debug/weather/fetch      # fetch weather now
+curl -X POST http://<host>:5757/api/debug/reminders/send      # send reminder now
+curl -X POST http://<host>:5757/api/debug/reminders/preview   # send preview with fake data
+```
 
 ## Tests
 
@@ -105,40 +124,42 @@ To find your Telegram chat ID: message your bot, then:
 curl -s https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates | python3 -m json.tool
 ```
 
-### Build
+### Build & Deploy
 
 ```bash
 git clone <repo-url> plants && cd plants
 podman build -t plant-tracker:latest .
-```
-
-### Deploy
-
-```bash
 ./deploy.sh
 ```
 
-The app runs on port **8472**, accessible via VPN at `http://<rpi-ip>:8472`.
+The app runs on host port **5757** (container port 8472), accessible at `http://<rpi-ip>:5757`.
 
-### Management
-
-```bash
-podman logs -f plant-tracker       # tail logs
-podman healthcheck run plant-tracker  # check health
-podman stop plant-tracker           # stop
-podman start plant-tracker          # start
-podman restart plant-tracker        # restart after code changes
-```
-
-### Auto-Start on Boot
+### Auto-Start on Boot (systemd)
 
 ```bash
+# Generate systemd unit from running container
 mkdir -p ~/.config/systemd/user
 podman generate systemd --name plant-tracker --new \
   > ~/.config/systemd/user/plant-tracker.service
+
+# Enable auto-start
+systemctl --user daemon-reload
 systemctl --user enable plant-tracker
+
+# Allow services to run without login session
 loginctl enable-linger $USER
 ```
+
+After this, the container starts automatically on boot. To manage via systemd:
+
+```bash
+systemctl --user status plant-tracker     # check status
+systemctl --user restart plant-tracker    # restart
+systemctl --user stop plant-tracker       # stop
+journalctl --user -u plant-tracker -f     # view logs
+```
+
+Note: `deploy.sh` manages the container directly via Podman. After running `deploy.sh`, the container is Podman-managed (not systemd). On the next reboot, systemd takes over. To keep systemd in control, use `systemctl --user restart plant-tracker` instead of `deploy.sh`.
 
 ### Rebuild After Updates
 
@@ -148,17 +169,27 @@ podman build -t plant-tracker:latest .
 ./deploy.sh
 ```
 
+### Management (Podman direct)
+
+```bash
+podman logs -f plant-tracker              # tail logs
+podman healthcheck run plant-tracker      # check health
+podman stop plant-tracker                 # stop
+podman restart plant-tracker              # restart
+```
+
 ### Security
 
 The container runs with multiple hardening layers:
 
 - **Rootless Podman** — no root access on host, even if container is compromised
-- **Non-root user** — app runs as uid 1000 inside the container
+- **`--userns=keep-id`** — host UID maps directly to container UID, no subordinate UID issues
+- **`--network pasta:--ipv4-only`** — prevents IPv6 accept-then-reset that breaks Safari/Happy Eyeballs
 - **Read-only filesystem** — container rootfs is immutable (`/tmp` is tmpfs)
 - **No capabilities** — all Linux capabilities dropped
 - **No privilege escalation** — setuid/setgid blocked
-- **Secrets isolation** — Telegram token stored encrypted, injected at runtime via `/run/secrets/`, not visible in `podman inspect` or environment
-- **Claude CLI read-only** — mounted from host, container cannot modify auth
+- **Secrets isolation** — Telegram token stored encrypted, injected at runtime via `/run/secrets/`
+- **Claude CLI read-only** — host `~/.claude` and `~/.claude.json` mounted read-only
 
 ### Data Layout
 

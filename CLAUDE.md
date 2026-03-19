@@ -16,16 +16,17 @@ Personal plant care PWA. FastAPI backend + SvelteKit frontend + SQLite. Deployed
 ```
 backend/app/
 ├── main.py              # FastAPI app, lifespan, static serving, SPA fallback
-├── database.py          # SQLite init + async connection (aiosqlite)
+├── database.py          # SQLite init + async connection (aiosqlite) + migrations
 ├── models.py            # Pydantic request/response models
 ├── settings.py          # settings.json read/write + Podman secrets (/run/secrets/)
 ├── routers/
-│   ├── plants.py        # CRUD + photo upload + background identification
-│   └── settings_router.py  # Settings API + Telegram test
+│   ├── plants.py        # CRUD + photo upload + background identification + PATCH
+│   ├── settings_router.py  # Settings API + Telegram test
+│   └── debug.py         # Debug API: weather cache, Claude logs, trigger endpoints
 └── services/
-    ├── claude.py         # Claude CLI subprocess wrapper (120s timeout)
-    ├── weather.py        # Open-Meteo geocoding + forecast
-    ├── telegram.py       # Telegram Bot API (MarkdownV2 for reminders, plain for test)
+    ├── claude.py         # Claude CLI wrapper: --json-schema structured output, call logging
+    ├── weather.py        # Open-Meteo geocoding + forecast (7 past + 3 forecast days)
+    ├── telegram.py       # Telegram Bot API: Rick and Morty themed reminders
     ├── scheduler.py      # APScheduler: weather fetch, reminders, schedule adjustment
     └── watering.py       # Due/overdue calculation
 
@@ -48,7 +49,7 @@ cd frontend && npm run dev   # Vite proxies /api and /photos to :8000
 ## Tests
 
 ```bash
-cd backend && uv run pytest -v   # 31 tests
+cd backend && uv run pytest -v
 ```
 
 ## Container Deployment (Production)
@@ -60,7 +61,24 @@ podman build -t plant-tracker:latest .
 ./deploy.sh
 ```
 
-Container runs internally on port 8472, mapped to host port **5757**. Security: rootless Podman, read-only filesystem, all capabilities dropped, non-root user, no-new-privileges, Podman secrets for Telegram.
+Container runs internally on port 8472, mapped to host port **5757**. Security: rootless Podman, read-only filesystem, all capabilities dropped, `--userns=keep-id`, `--network pasta:--ipv4-only`, no-new-privileges, Podman secrets for Telegram.
+
+### systemd auto-start
+
+The container is managed by a systemd user service for auto-start on boot:
+
+```bash
+systemctl --user status plant-tracker    # check status
+systemctl --user restart plant-tracker   # restart via systemd
+```
+
+`deploy.sh` manages the container via Podman directly. After `deploy.sh`, Podman owns the container. On next reboot, systemd takes over. To regenerate the service file after changing `deploy.sh`:
+
+```bash
+podman generate systemd --name plant-tracker --new \
+  > ~/.config/systemd/user/plant-tracker.service
+systemctl --user daemon-reload
+```
 
 ### Data lives on the host
 
@@ -157,21 +175,9 @@ cp -r ~/plant-data-backup-YYYYMMDD/* ~/plant-data/
 podman start plant-tracker
 ```
 
-### Check if container auto-starts on boot
-
-```bash
-systemctl --user status plant-tracker
-# If not set up yet:
-mkdir -p ~/.config/systemd/user
-podman generate systemd --name plant-tracker --new \
-  > ~/.config/systemd/user/plant-tracker.service
-systemctl --user enable plant-tracker
-loginctl enable-linger $USER
-```
-
 ### Reset a stuck "Identifying..." plant
 
-The plant was saved but Claude CLI failed during identification. Options:
+The plant was saved but Claude CLI failed during identification. Check the debug page (Settings → Debug → Claude Logs) to see the error. Options:
 1. Delete and re-add the plant through the UI
 2. Or check why Claude CLI failed:
    ```bash
@@ -182,13 +188,33 @@ The plant was saved but Claude CLI failed during identification. Options:
    claude -p "say hello"   # run on host, re-auth if prompted
    ```
 
+### Debug endpoints
+
+```bash
+# Trigger a weather fetch
+curl -X POST http://localhost:5757/api/debug/weather/fetch
+
+# Send watering reminder (only if plants are due)
+curl -X POST http://localhost:5757/api/debug/reminders/send
+
+# Send preview reminder with fake data (always sends)
+curl -X POST http://localhost:5757/api/debug/reminders/preview
+
+# View weather cache
+curl http://localhost:5757/api/debug/weather
+
+# View Claude call logs
+curl http://localhost:5757/api/debug/claude-logs
+```
+
 ### Inspect the SQLite database
 
 ```bash
 sqlite3 ~/plant-data/db/plants.db
 .tables
-SELECT id, name, species FROM plants;
+SELECT id, name, species, location FROM plants;
 SELECT * FROM watering_schedules;
+SELECT * FROM claude_logs ORDER BY created_at DESC LIMIT 5;
 .quit
 ```
 
@@ -196,33 +222,27 @@ SELECT * FROM watering_schedules;
 
 ## Key Design Decisions
 
-- **Claude CLI** invoked as subprocess (`claude -p`), not the SDK. Image paths are embedded in the prompt text — Claude uses its built-in Read tool to view them. 120s timeout prevents hangs.
-- **Photos** stored on filesystem, DB holds web path (`/photos/filename`). Served via StaticFiles mount.
-- **SPA routing**: FastAPI catch-all route at `/{path:path}` serves static files or falls back to `index.html`. This is why `/plants/1` works — it's not a real file, it's the SPA.
-- **Telegram** uses MarkdownV2 for watering reminders (plant names are escaped), plain text for test messages. `send_message()` takes optional `parse_mode` param.
+- **Claude CLI** invoked as subprocess (`claude -p`), not the SDK. Uses `--json-schema` for structured output (parsed from `structured_output` field in JSON envelope) and `--add-dir` to grant read access to photo directory. 120s timeout prevents hangs.
+- **Photos** stored on filesystem, DB holds web path (`/photos/filename`). Served via StaticFiles mount using `PLANTS_PHOTO_DIR` env var.
+- **SPA routing**: FastAPI catch-all route at `/{path:path}` serves static files or falls back to `index.html`.
+- **Telegram** uses MarkdownV2 for watering reminders (Rick and Morty themed, rotating daily), plain text for test messages. `send_message()` takes optional `parse_mode` param.
 - **LLM output validation**: interval clamped to 0.5-90 days, plant_id verified against DB before writes.
-- **Background identification**: `asyncio.create_task` with full try/except + logging. Checks plant still exists before writing (handles race with quick delete).
+- **Background identification**: `asyncio.create_task` with full try/except + logging. Checks plant still exists before writing. Triggers `job_adjust_schedules` immediately after to apply weather-based adjustment.
+- **Claude call logging**: every CLI call is logged to `claude_logs` table with task, prompt, response, error, and duration.
+- **Plant location**: indoor/balcony toggle affects schedule adjustment — balcony plants get temperature-aware intervals.
 - **Secrets**: `settings.py` reads from `/run/secrets/` first (Podman secrets), falls back to `settings.json`. In container mode, Telegram creds come from secrets only.
-- **Security**: rootless Podman, non-root container user, read-only rootfs, cap-drop ALL, no-new-privileges, RO Claude mount.
+- **Container networking**: `--userns=keep-id` maps host UID directly to container UID (no subordinate UID issues). `pasta:--ipv4-only` prevents IPv6 accept-then-reset that breaks Safari with `.local` mDNS.
+- **Geocoding**: Open-Meteo geocoding strips country suffix ("London, UK" → "London") as the API doesn't handle the comma format.
+- **Weather**: fetches 7 past + 3 forecast days, all included in adjustment query. `INSERT OR REPLACE` on unique date avoids duplicates.
 
 ## Common Issues & Debugging
 
 ### Plant stuck on "Identifying..."
 
-The background `_identify_and_update` task failed or timed out. Check:
-
-```bash
-# Container logs
-podman logs --since 5m plant-tracker | grep -i "identif\|claude\|failed\|timeout"
-
-# Is Claude CLI working inside the container?
-podman exec plant-tracker claude -p "say hello" --output-format text
-
-# Is Claude CLI working on the host?
-claude -p "say hello" --output-format text
-```
-
-The plant is saved to DB immediately (with `species=NULL`). Identification runs async. If it fails, the plant stays with "Identifying..." forever. To retry, delete and re-add the plant.
+Check Settings → Debug → Claude Logs for the error. Common causes:
+- Empty response: Claude CLI `--json-schema` requires `--output-format json` (not `text`). The structured output is in the `structured_output` field of the JSON envelope.
+- Permission denied on photo: `--add-dir` must be passed to grant Claude CLI read access to the photo directory.
+- `.claude.json` not found: host `~/.claude.json` must be mounted into the container.
 
 ### Photos not loading
 
@@ -235,9 +255,9 @@ Photos are served at `/photos/{filename}` via StaticFiles. Check:
 ### Weather/geocoding not working
 
 `weather.py` uses `httpx` async client. Common issues:
-- `resp.json()` is sync (NOT `await resp.json()`) — this was a past bug, now fixed
+- City name with comma ("London, UK") fails geocoding — code strips suffix automatically
 - Network unreachable in container — check DNS: `podman exec plant-tracker curl -s https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&daily=temperature_2m_max`
-- Open-Meteo may rate-limit aggressive requests
+- Scheduler skips weather fetch if city is empty (not just if lat/lon is 0)
 
 ### Telegram test fails
 
@@ -249,8 +269,7 @@ Photos are served at `/photos/{filename}` via StaticFiles. Check:
 ### Scheduler not firing
 
 - Reminder time is read once at startup. Changing it in settings requires `podman restart plant-tracker`.
-- Weather fetch: daily at 06:00. Reminders: daily at configured time. Schedule adjustment: Monday 07:00.
-- Logs: `INFO "Scheduler started with 3 jobs"` on startup
+- Weather fetch: daily at 06:00. Reminders: daily at configured time. Schedule adjustment: every 3 days at 07:00.
 
 ### Container won't start
 
@@ -260,7 +279,6 @@ podman logs plant-tracker
 
 # Common: port already in use
 podman ps -a | grep 5757
-# Kill conflicting container or change port in deploy.sh
 
 # Common: secrets not created
 podman secret ls

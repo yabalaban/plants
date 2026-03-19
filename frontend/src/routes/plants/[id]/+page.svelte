@@ -259,6 +259,38 @@
                 </div>
             {/if}
 
+            {#if plant.health_status}
+                {@const health = plant.health_status}
+                <div class="section">
+                    <h2 class="section-title">Health Check</h2>
+                    <div class="health-card {health.overall}">
+                        <div class="health-header">
+                            <span class="health-badge {health.overall}">
+                                {#if health.overall === 'good'}&#x2705;{:else if health.overall === 'fair'}&#x26A0;&#xFE0F;{:else if health.overall === 'poor'}&#x1F7E0;{:else}&#x1F534;{/if}
+                                {health.overall}
+                            </span>
+                        </div>
+                        <p class="health-summary">{health.summary}</p>
+                        {#if health.issues.length > 0}
+                            <div class="health-list">
+                                <span class="health-list-label">Issues</span>
+                                {#each health.issues as issue}
+                                    <span class="health-item issue">{issue}</span>
+                                {/each}
+                            </div>
+                        {/if}
+                        {#if health.recommendations.length > 0}
+                            <div class="health-list">
+                                <span class="health-list-label">Recommendations</span>
+                                {#each health.recommendations as rec}
+                                    <span class="health-item rec">{rec}</span>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+                </div>
+            {/if}
+
             {#if plant.watering_logs.length > 0}
                 <div class="section">
                     <h2 class="section-title">History</h2>
@@ -520,6 +552,43 @@
     .care-item { display: flex; flex-direction: column; gap: 0.15rem; }
     .care-label { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .care-value { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; }
+
+    /* Health */
+    .health-card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1rem;
+        display: flex; flex-direction: column; gap: 0.75rem;
+    }
+    .health-card.good { border-color: var(--accent-medium); }
+    .health-card.fair { border-color: rgba(232, 168, 124, 0.3); }
+    .health-card.poor { border-color: rgba(232, 168, 124, 0.5); }
+    .health-card.critical { border-color: rgba(201, 123, 123, 0.4); }
+    .health-header { display: flex; align-items: center; }
+    .health-badge {
+        font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.05em; padding: 0.2rem 0.5rem;
+        border-radius: 999px; display: inline-flex; align-items: center; gap: 0.3rem;
+    }
+    .health-badge.good { background: var(--accent-dim); color: var(--accent); }
+    .health-badge.fair { background: rgba(232, 168, 124, 0.1); color: var(--alert); }
+    .health-badge.poor { background: rgba(232, 168, 124, 0.15); color: var(--alert); }
+    .health-badge.critical { background: var(--danger-dim); color: var(--danger); }
+    .health-summary { font-size: 0.875rem; line-height: 1.6; color: var(--text-secondary); }
+    .health-list { display: flex; flex-direction: column; gap: 0.3rem; }
+    .health-list-label {
+        font-size: 0.65rem; font-weight: 600; color: var(--text-muted);
+        text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .health-item {
+        font-size: 0.8rem; line-height: 1.5; color: var(--text-secondary);
+        padding-left: 0.75rem; position: relative;
+    }
+    .health-item::before {
+        content: ''; position: absolute; left: 0; top: 0.55rem;
+        width: 4px; height: 4px; border-radius: 50%;
+    }
+    .health-item.issue::before { background: var(--alert); }
+    .health-item.rec::before { background: var(--accent); }
 
     /* History */
     .log-list { display: flex; flex-direction: column; position: relative; padding-left: 1rem; }

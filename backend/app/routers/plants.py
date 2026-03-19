@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.database import get_db
 from app.models import PlantDetailResponse, PlantResponse, PlantUpdate, WaterPlantRequest, WateringLogResponse
-from app.services.claude import identify_plant
+from app.services.claude import identify_plant, check_plant_health
 from app.services.scheduler import job_adjust_schedules
 
 router = APIRouter(prefix="/api/plants", tags=["plants"])
@@ -50,6 +50,15 @@ async def _identify_and_update(plant_id: int, photo_path: str):
                 VALUES (?, ?, datetime('now', '+' || ? || ' days'), 'initial schedule')
             """, (plant_id, interval, interval))
             await db.commit()
+        # Health check on the same photo
+        health = await check_plant_health(photo_path, identification.get("species"))
+        if health:
+            async with aiosqlite.connect(get_db_path()) as db:
+                await db.execute(
+                    "UPDATE plants SET health_status = ? WHERE id = ?",
+                    (json.dumps(health), plant_id),
+                )
+                await db.commit()
         # Adjust schedule based on current weather data (if available)
         await job_adjust_schedules()
     except Exception:
@@ -58,6 +67,21 @@ async def _identify_and_update(plant_id: int, photo_path: str):
 
 def _get_photo_dir() -> str:
     return os.environ.get("PLANTS_PHOTO_DIR", "./photos")
+
+
+def _plant_from_row(row) -> PlantResponse:
+    keys = row.keys() if hasattr(row, "keys") else []
+    return PlantResponse(
+        id=row["id"], name=row["name"], species=row["species"],
+        location=row["location"], photo_path=row["photo_path"],
+        identification_details=json.loads(row["identification_details"]) if row["identification_details"] else None,
+        health_status=json.loads(row["health_status"]) if row["health_status"] else None,
+        base_watering_interval_days=row["base_watering_interval_days"],
+        created_at=row["created_at"],
+        interval_days=row["interval_days"] if "interval_days" in keys else None,
+        next_watering=row["next_watering"] if "next_watering" in keys else None,
+        adjustment_reason=row["adjustment_reason"] if "adjustment_reason" in keys else None,
+    )
 
 
 @router.get("", response_model=list[PlantResponse])
@@ -69,25 +93,7 @@ async def list_plants(db: aiosqlite.Connection = Depends(get_db)):
         ORDER BY CASE WHEN s.next_watering IS NULL THEN 1 ELSE 0 END, s.next_watering ASC
     """)
     rows = await cursor.fetchall()
-    plants = []
-    for row in rows:
-        identification = None
-        if row["identification_details"]:
-            identification = json.loads(row["identification_details"])
-        plants.append(PlantResponse(
-            id=row["id"],
-            name=row["name"],
-            species=row["species"],
-            location=row["location"],
-            photo_path=row["photo_path"],
-            identification_details=identification,
-            base_watering_interval_days=row["base_watering_interval_days"],
-            created_at=row["created_at"],
-            interval_days=row["interval_days"],
-            next_watering=row["next_watering"],
-            adjustment_reason=row["adjustment_reason"],
-        ))
-    return plants
+    return [_plant_from_row(row) for row in rows]
 
 
 @router.post("", response_model=PlantResponse, status_code=201)
@@ -123,16 +129,7 @@ async def add_plant(
     cursor = await db.execute("SELECT * FROM plants WHERE id = ?", (plant_id,))
     row = await cursor.fetchone()
     asyncio.create_task(_identify_and_update(plant_id, filepath))
-    return PlantResponse(
-        id=row["id"],
-        name=row["name"],
-        species=row["species"],
-        location=row["location"],
-        photo_path=row["photo_path"],
-        identification_details=None,
-        base_watering_interval_days=row["base_watering_interval_days"],
-        created_at=row["created_at"],
-    )
+    return _plant_from_row(row)
 
 
 @router.get("/{plant_id}", response_model=PlantDetailResponse)
@@ -152,23 +149,9 @@ async def get_plant(plant_id: int, db: aiosqlite.Connection = Depends(get_db)):
         (plant_id,),
     )
     logs = await cursor.fetchall()
-
-    identification = None
-    if row["identification_details"]:
-        identification = json.loads(row["identification_details"])
-
+    base = _plant_from_row(row)
     return PlantDetailResponse(
-        id=row["id"],
-        name=row["name"],
-        species=row["species"],
-        location=row["location"],
-        photo_path=row["photo_path"],
-        identification_details=identification,
-        base_watering_interval_days=row["base_watering_interval_days"],
-        created_at=row["created_at"],
-        interval_days=row["interval_days"],
-        next_watering=row["next_watering"],
-        adjustment_reason=row["adjustment_reason"],
+        **base.model_dump(),
         watering_logs=[
             WateringLogResponse(id=log["id"], watered_at=log["watered_at"], notes=log["notes"])
             for log in logs
@@ -214,14 +197,7 @@ async def update_plant(plant_id: int, body: PlantUpdate, db: aiosqlite.Connectio
         WHERE p.id = ?
     """, (plant_id,))
     row = await cursor.fetchone()
-    identification = json.loads(row["identification_details"]) if row["identification_details"] else None
-    return PlantResponse(
-        id=row["id"], name=row["name"], species=row["species"], location=row["location"],
-        photo_path=row["photo_path"], identification_details=identification,
-        base_watering_interval_days=row["base_watering_interval_days"],
-        created_at=row["created_at"], interval_days=row["interval_days"],
-        next_watering=row["next_watering"], adjustment_reason=row["adjustment_reason"],
-    )
+    return _plant_from_row(row)
 
 
 @router.delete("/{plant_id}", status_code=204)

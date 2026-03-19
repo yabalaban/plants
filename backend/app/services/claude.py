@@ -30,6 +30,25 @@ IDENTIFY_SCHEMA = json.dumps({
     ],
 })
 
+HEALTH_CHECK_SCHEMA = json.dumps({
+    "type": "object",
+    "properties": {
+        "overall": {"type": "string", "enum": ["good", "fair", "poor", "critical"]},
+        "summary": {"type": "string", "description": "1-2 sentence overall assessment"},
+        "issues": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of observed problems, empty if healthy",
+        },
+        "recommendations": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Actionable care suggestions",
+        },
+    },
+    "required": ["overall", "summary", "issues", "recommendations"],
+})
+
 ADJUST_SCHEMA = json.dumps({
     "type": "object",
     "properties": {
@@ -115,6 +134,19 @@ async def identify_plant(photo_path: str) -> dict | None:
         return json.loads(response)
     except Exception:
         logger.exception("Plant identification failed")
+        return None
+
+
+async def check_plant_health(photo_path: str, species: str | None) -> dict | None:
+    context = f" The plant is {species}." if species else ""
+    prompt = f"Assess the health of this plant from the photo.{context} Look for signs of disease, pests, nutrient deficiency, overwatering, underwatering, sunburn, or other issues."
+    try:
+        response = await _run_claude_cli(
+            prompt, task="health_check", image_path=photo_path, schema=HEALTH_CHECK_SCHEMA,
+        )
+        return json.loads(response)
+    except Exception:
+        logger.exception("Plant health check failed")
         return None
 
 

@@ -16,6 +16,13 @@ class PlantIdentification(BaseModel):
     underwatering_signs: str
 
 
+class PlantHealth(BaseModel):
+    overall: str
+    summary: str
+    issues: list[str]
+    recommendations: list[str]
+
+
 class PlantResponse(BaseModel):
     id: int
     name: str
@@ -23,6 +30,7 @@ class PlantResponse(BaseModel):
     location: str
     photo_path: str
     identification_details: PlantIdentification | None
+    health_status: PlantHealth | None = None
     base_watering_interval_days: int | None
     created_at: str
     interval_days: float | None = None

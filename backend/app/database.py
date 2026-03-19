@@ -76,4 +76,6 @@ async def init_db():
         columns = {row[1] for row in await cursor.fetchall()}
         if "location" not in columns:
             await db.execute("ALTER TABLE plants ADD COLUMN location TEXT NOT NULL DEFAULT 'indoor'")
+        if "health_status" not in columns:
+            await db.execute("ALTER TABLE plants ADD COLUMN health_status TEXT")
         await db.commit()

@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends
 import aiosqlite
 from app.database import get_db
@@ -42,6 +43,27 @@ async def preview_reminder():
         return {"status": "no_config"}
     await send_message(settings.telegram.bot_token, settings.telegram.chat_id, message, parse_mode="MarkdownV2")
     return {"status": "sent"}
+
+
+@router.post("/health-check-all")
+async def trigger_health_check_all(db: aiosqlite.Connection = Depends(get_db)):
+    import json as _json
+    from app.services.claude import check_plant_health
+    cursor = await db.execute("SELECT id, species, photo_path, health_status FROM plants WHERE species IS NOT NULL")
+    plants = [dict(row) for row in await cursor.fetchall()]
+    checked = 0
+    for p in plants:
+        if p["health_status"]:
+            continue
+        # Translate web path to filesystem path
+        photo_dir = os.environ.get("PLANTS_PHOTO_DIR", "./photos")
+        photo_file = os.path.join(photo_dir, os.path.basename(p["photo_path"]))
+        health = await check_plant_health(photo_file, p["species"])
+        if health:
+            await db.execute("UPDATE plants SET health_status = ? WHERE id = ?", (_json.dumps(health), p["id"]))
+            await db.commit()
+            checked += 1
+    return {"status": "ok", "checked": checked, "skipped": len(plants) - checked}
 
 
 @router.get("/claude-logs")

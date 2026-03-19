@@ -8,6 +8,13 @@ export interface PlantIdentification {
     underwatering_signs: string;
 }
 
+export interface PlantHealth {
+    overall: string;
+    summary: string;
+    issues: string[];
+    recommendations: string[];
+}
+
 export interface Plant {
     id: number;
     name: string;
@@ -15,6 +22,7 @@ export interface Plant {
     location: string;
     photo_path: string;
     identification_details: PlantIdentification | null;
+    health_status: PlantHealth | null;
     base_watering_interval_days: number | null;
     created_at: string;
     interval_days: number | null;

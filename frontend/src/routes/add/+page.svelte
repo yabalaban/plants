@@ -59,7 +59,6 @@
                 <input
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     onchange={handleFileChange}
                     class="file-input"
                 />

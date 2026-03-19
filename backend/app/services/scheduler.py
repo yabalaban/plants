@@ -63,10 +63,13 @@ async def job_adjust_schedules():
             await db.execute("""
                 UPDATE watering_schedules SET interval_days = ?, last_adjusted = CURRENT_TIMESTAMP,
                     adjustment_reason = ?, next_watering = datetime(
-                        (SELECT watered_at FROM watering_logs WHERE plant_id = ? ORDER BY watered_at DESC LIMIT 1),
+                        COALESCE(
+                            (SELECT watered_at FROM watering_logs WHERE plant_id = ? ORDER BY watered_at DESC LIMIT 1),
+                            CURRENT_TIMESTAMP
+                        ),
                         '+' || ? || ' days')
                 WHERE plant_id = ?
-            """, (adj["interval_days"], adj.get("reason", "weather adjustment"), adj["plant_id"], int(adj["interval_days"]), adj["plant_id"]))
+            """, (adj["interval_days"], adj.get("reason", "weather adjustment"), adj["plant_id"], adj["interval_days"], adj["plant_id"]))
         await db.commit()
 
 

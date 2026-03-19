@@ -160,7 +160,7 @@ async def water_plant(plant_id: int, body: WaterPlantRequest, db: aiosqlite.Conn
 
     await db.execute("""
         UPDATE watering_schedules
-        SET next_watering = datetime('now', '+' || CAST(interval_days AS INTEGER) || ' days')
+        SET next_watering = datetime('now', '+' || interval_days || ' days')
         WHERE plant_id = ?
     """, (plant_id,))
     await db.commit()

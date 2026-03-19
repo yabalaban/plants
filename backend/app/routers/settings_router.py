@@ -20,9 +20,12 @@ async def update_settings(body: SettingsUpdate):
     s = load_settings()
     if body.location_city is not None:
         s.location.city = body.location_city
-        coords = await geocode_city(body.location_city)
-        if coords:
-            s.location.latitude, s.location.longitude = coords
+        try:
+            coords = await geocode_city(body.location_city)
+            if coords:
+                s.location.latitude, s.location.longitude = coords
+        except Exception:
+            pass  # Save city without coordinates if geocoding fails
     if body.telegram_bot_token is not None:
         s.telegram.bot_token = body.telegram_bot_token
     if body.telegram_chat_id is not None:

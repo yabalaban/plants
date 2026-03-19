@@ -10,7 +10,6 @@ from app.services.scheduler import start_scheduler, stop_scheduler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    os.makedirs("./photos", exist_ok=True)
     start_scheduler()
     yield
     stop_scheduler()

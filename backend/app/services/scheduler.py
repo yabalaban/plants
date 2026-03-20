@@ -84,7 +84,7 @@ async def job_adjust_schedules():
 
 
 def start_scheduler():
-    scheduler.add_job(job_fetch_weather, CronTrigger(hour=6, minute=0), id="fetch_weather", replace_existing=True)
+    scheduler.add_job(job_fetch_weather, CronTrigger(hour=6, minute=17), id="fetch_weather", replace_existing=True)
     settings = load_settings()
     hour, minute = (int(x) for x in settings.reminder_time.split(":"))
     scheduler.add_job(job_send_reminders, CronTrigger(hour=hour, minute=minute), id="send_reminders", replace_existing=True)

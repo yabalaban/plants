@@ -8,7 +8,7 @@ WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
 async def geocode_city(city: str) -> tuple[float, float] | None:
     # Open-Meteo doesn't handle "City, Country" format — use just the city name
     city_name = city.split(",")[0].strip()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(GEOCODE_URL, params={"name": city_name, "count": 1})
         resp.raise_for_status()
         data = resp.json()
@@ -23,7 +23,7 @@ async def fetch_weather(latitude: float, longitude: float, days: int = 7) -> lis
         "daily": "temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean,precipitation_sum",
         "past_days": days, "forecast_days": 3,
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(WEATHER_URL, params=params)
         resp.raise_for_status()
         data = resp.json()

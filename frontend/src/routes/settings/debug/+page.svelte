@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { getWeatherCache, getClaudeLogs } from '$lib/api';
+    import { getWeatherCache, getClaudeLogs, triggerWeatherAndAdjust } from '$lib/api';
     import type { WeatherEntry, ClaudeLog } from '$lib/types';
 
     let weather = $state<WeatherEntry[]>([]);
@@ -8,6 +8,19 @@
     let loading = $state(true);
     let activeTab = $state<'weather' | 'claude'>('claude');
     let expandedLog = $state<number | null>(null);
+    let fetchingWeather = $state(false);
+
+    async function handleFetchAndAdjust() {
+        fetchingWeather = true;
+        try {
+            await triggerWeatherAndAdjust();
+            await load();
+        } catch {
+            // error visible in claude logs
+        } finally {
+            fetchingWeather = false;
+        }
+    }
 
     function toggleLog(id: number) {
         expandedLog = expandedLog === id ? null : id;
@@ -73,6 +86,10 @@
             Weather Cache
         </button>
     </div>
+
+    <button class="action-btn" onclick={handleFetchAndAdjust} disabled={fetchingWeather}>
+        {fetchingWeather ? 'Fetching...' : 'Fetch Weather + Adjust'}
+    </button>
 
     {#if loading}
         <div class="skeleton-list">
@@ -266,6 +283,15 @@
     .stat-icon.cold { color: var(--info); }
     .weather-stat.rain { color: var(--info); }
     .weather-row.forecast { opacity: 0.65; border-style: dashed; }
+    .action-btn {
+        width: 100%; padding: 0.75rem; border-radius: var(--radius-sm);
+        background: var(--surface); border: 1px solid var(--border);
+        color: var(--text-primary); font-weight: 600; font-size: 0.85rem;
+        cursor: pointer; transition: all 0.15s;
+    }
+    .action-btn:hover:not(:disabled) { border-color: var(--accent-medium); background: var(--surface-raised); }
+    .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
     .forecast-badge {
         font-size: 0.55rem; padding: 0.1rem 0.35rem; border-radius: 999px;
         background: var(--info-dim, rgba(123, 168, 201, 0.1)); color: var(--info);

@@ -53,3 +53,4 @@ export async function testTelegram(): Promise<void> { await request('/settings/t
 
 export async function getWeatherCache(): Promise<WeatherEntry[]> { return request('/debug/weather'); }
 export async function getClaudeLogs(): Promise<ClaudeLog[]> { return request('/debug/claude-logs'); }
+export async function triggerWeatherAndAdjust(): Promise<void> { await request('/debug/weather/fetch-and-adjust', { method: 'POST' }); }

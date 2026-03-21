@@ -75,11 +75,11 @@ async def job_adjust_schedules():
                     adjustment_reason = ?, next_watering = datetime(
                         COALESCE(
                             (SELECT watered_at FROM watering_logs WHERE plant_id = ? ORDER BY watered_at DESC LIMIT 1),
-                            CURRENT_TIMESTAMP
+                            (SELECT created_at FROM plants WHERE id = ?)
                         ),
                         '+' || ? || ' days')
                 WHERE plant_id = ?
-            """, (interval, adj.get("reason", "weather adjustment"), pid, interval, pid))
+            """, (interval, adj.get("reason", "weather adjustment"), pid, pid, interval, pid))
         await db.commit()
 
 

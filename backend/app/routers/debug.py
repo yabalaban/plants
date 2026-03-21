@@ -2,7 +2,7 @@ import os
 from fastapi import APIRouter, Depends
 import aiosqlite
 from app.database import get_db
-from app.services.scheduler import job_fetch_weather, job_send_reminders
+from app.services.scheduler import job_fetch_weather, job_send_reminders, job_adjust_schedules
 
 router = APIRouter(prefix="/api/debug", tags=["debug"])
 
@@ -20,6 +20,13 @@ async def get_weather_cache(db: aiosqlite.Connection = Depends(get_db)):
 @router.post("/weather/fetch")
 async def trigger_weather_fetch():
     await job_fetch_weather()
+    return {"status": "ok"}
+
+
+@router.post("/weather/fetch-and-adjust")
+async def trigger_weather_fetch_and_adjust():
+    await job_fetch_weather()
+    await job_adjust_schedules()
     return {"status": "ok"}
 
 

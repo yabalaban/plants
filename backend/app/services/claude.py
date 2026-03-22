@@ -13,6 +13,19 @@ logger = logging.getLogger(__name__)
 
 CLI_TIMEOUT = int(os.environ.get("CLAUDE_CLI_TIMEOUT", "120"))
 
+HOST_CREDS = "/host-creds/.credentials.json"
+APP_CREDS = os.path.expanduser("~/.claude/.credentials.json")
+
+
+def _sync_credentials():
+    """Copy fresh credentials from host mount before each CLI call."""
+    try:
+        if os.path.exists(HOST_CREDS):
+            import shutil
+            shutil.copy2(HOST_CREDS, APP_CREDS)
+    except Exception:
+        pass  # fall back to existing staged credentials
+
 IDENTIFY_SCHEMA = json.dumps({
     "type": "object",
     "properties": {
@@ -88,6 +101,7 @@ async def _run_claude_cli(
     image_path: str | None = None,
     schema: str | None = None,
 ) -> str:
+    _sync_credentials()
     output_format = "json" if schema else "text"
     cmd = ["claude", "-p", prompt, "--output-format", output_format]
     if image_path:

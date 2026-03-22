@@ -21,7 +21,11 @@ rm -rf "$CLAUDE_STAGE"
 mkdir -p "$CLAUDE_STAGE"
 cp -a "$HOME/.claude" "$CLAUDE_STAGE/claude-dir"
 cp "$HOME/.claude.json" "$CLAUDE_STAGE/claude.json"
-chmod -R a+rX "$CLAUDE_STAGE"
+chmod -R a+rwX "$CLAUDE_STAGE"
+
+# Make host creds readable so container can live-refresh before each CLI call
+chmod a+rX "$HOME/.claude"
+chmod a+r "$HOME/.claude/.credentials.json" 2>/dev/null || true
 
 # Stop existing container if running
 podman stop "$NAME" 2>/dev/null || true
@@ -40,8 +44,9 @@ podman run -d \
   -v "$DATA_DIR/db":/data/db:rw,U \
   -v "$DATA_DIR/photos":/data/photos:rw,U \
   -v "$DATA_DIR/config":/data/config:rw,U \
-  -v "$CLAUDE_STAGE/claude-dir":/home/app/.claude:ro \
+  -v "$CLAUDE_STAGE/claude-dir":/home/app/.claude:rw \
   -v "$CLAUDE_STAGE/claude.json":/home/app/.claude.json:ro \
+  -v "$HOME/.claude":/host-creds:ro \
   -v "$CLAUDE_BIN":/usr/local/bin/claude:ro \
   --secret telegram_bot_token \
   --secret telegram_chat_id \

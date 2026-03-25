@@ -23,8 +23,8 @@ def _sync_credentials():
         if os.path.exists(HOST_CREDS):
             import shutil
             shutil.copy2(HOST_CREDS, APP_CREDS)
-    except Exception:
-        pass  # fall back to existing staged credentials
+    except Exception as e:
+        logger.warning("Could not sync credentials from host mount: %s", e)
 
 IDENTIFY_SCHEMA = json.dumps({
     "type": "object",
@@ -126,7 +126,7 @@ async def _run_claude_cli(
         raise RuntimeError(error)
     duration_ms = int((time.monotonic() - t0) * 1000)
     if proc.returncode != 0:
-        error = stderr.decode()
+        error = stderr.decode().strip() or stdout.decode().strip()
         await _log_call(task, prompt, None, error, duration_ms)
         raise RuntimeError(f"Claude CLI failed: {error}")
     raw = stdout.decode().strip()

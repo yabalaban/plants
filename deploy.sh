@@ -17,7 +17,7 @@ mkdir -p "$DATA_DIR"/{db,photos,config}
 
 # Stage Claude config readable by container's subordinate UID
 CLAUDE_STAGE="$DATA_DIR/.claude-stage"
-rm -rf "$CLAUDE_STAGE"
+podman unshare rm -rf "$CLAUDE_STAGE" 2>/dev/null || rm -rf "$CLAUDE_STAGE"
 mkdir -p "$CLAUDE_STAGE"
 cp -a "$HOME/.claude" "$CLAUDE_STAGE/claude-dir"
 cp "$HOME/.claude.json" "$CLAUDE_STAGE/claude.json"

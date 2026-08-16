@@ -12,3 +12,4 @@ frontend/.svelte-kit/
 .DS_Store
 .playwright-mcp/
 /debug-*
+resume.cc

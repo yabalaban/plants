@@ -7,24 +7,21 @@ import time
 import aiosqlite
 
 from app.database import get_db_path
+from app.settings import _read_secret
 
 logger = logging.getLogger(__name__)
 
 
 CLI_TIMEOUT = int(os.environ.get("CLAUDE_CLI_TIMEOUT", "120"))
 
-HOST_CREDS = "/host-creds/.credentials.json"
-APP_CREDS = os.path.expanduser("~/.claude/.credentials.json")
+# Dedicated API key for headless CLI calls (Podman secret in prod, env var
+# for local dev). Kept separate from any interactive Claude Code login so
+# this process never touches the host's personal OAuth session/config.
+ANTHROPIC_API_KEY = _read_secret("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY")
 
-
-def _sync_credentials():
-    """Copy fresh credentials from host mount before each CLI call."""
-    try:
-        if os.path.exists(HOST_CREDS):
-            import shutil
-            shutil.copy2(HOST_CREDS, APP_CREDS)
-    except Exception as e:
-        logger.warning("Could not sync credentials from host mount: %s", e)
+# Ephemeral HOME for the CLI subprocess so it never reads/writes the host's
+# ~/.claude config — just its own ~/.claude under /tmp (tmpfs in prod).
+CLI_HOME = os.environ.get("CLAUDE_CLI_HOME", "/tmp/claude-cli-home")
 
 IDENTIFY_SCHEMA = json.dumps({
     "type": "object",
@@ -101,7 +98,12 @@ async def _run_claude_cli(
     image_path: str | None = None,
     schema: str | None = None,
 ) -> str:
-    _sync_credentials()
+    env = dict(os.environ)
+    if ANTHROPIC_API_KEY:
+        # Isolated, ephemeral home — API-key auth never touches ~/.claude
+        os.makedirs(CLI_HOME, exist_ok=True)
+        env["HOME"] = CLI_HOME
+        env["ANTHROPIC_API_KEY"] = ANTHROPIC_API_KEY
     output_format = "json" if schema else "text"
     cmd = ["claude", "-p", prompt, "--output-format", output_format]
     if image_path:
@@ -112,7 +114,7 @@ async def _run_claude_cli(
     if schema:
         cmd.extend(["--json-schema", schema])
     proc = await asyncio.create_subprocess_exec(
-        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=env,
     )
     t0 = time.monotonic()
     try:

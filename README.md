@@ -106,7 +106,7 @@ The recommended way to run on a Raspberry Pi. Uses Podman (rootless) with full s
 
 - [Podman](https://podman.io/) installed (`sudo apt install podman`)
 - [mise](https://mise.jdx.dev/) installed
-- [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+- [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed (binary only — the container uses its own API key, not your login)
 
 ### One-Time Setup
 
@@ -114,10 +114,13 @@ The recommended way to run on a Raspberry Pi. Uses Podman (rootless) with full s
 # Create data directory
 mkdir -p ~/plant-data/{db,photos,config}
 
-# Store Telegram secrets (encrypted by Podman)
-echo "YOUR_BOT_TOKEN" | podman secret create telegram_bot_token -
-echo "YOUR_CHAT_ID"   | podman secret create telegram_chat_id -
+# Store secrets (encrypted by Podman)
+echo "YOUR_BOT_TOKEN"   | podman secret create telegram_bot_token -
+echo "YOUR_CHAT_ID"     | podman secret create telegram_chat_id -
+echo "YOUR_ANTHROPIC_API_KEY" | podman secret create anthropic_api_key -
 ```
+
+Get an API key from the [Anthropic Console](https://console.anthropic.com/settings/keys). This is billed separately (pay-per-token) from any Claude subscription — the app makes a handful of calls per day (plant ID, health checks, watering-schedule adjustment), so cost is normally small. Using a dedicated key instead of your interactive `claude` login keeps the container's credentials isolated from your personal session.
 
 To find your Telegram chat ID: message your bot, then:
 ```bash
@@ -189,7 +192,7 @@ The container runs with multiple hardening layers:
 - **No capabilities** — all Linux capabilities dropped
 - **No privilege escalation** — setuid/setgid blocked
 - **Secrets isolation** — Telegram token stored encrypted, injected at runtime via `/run/secrets/`
-- **Claude CLI read-only** — host `~/.claude` and `~/.claude.json` mounted read-only
+- **Claude CLI isolation** — container authenticates with its own `anthropic_api_key` secret and an ephemeral `HOME`, never mounts or reads your host `~/.claude` config
 
 ### Data Layout
 

@@ -89,7 +89,7 @@ systemctl --user daemon-reload
 └── config/settings.json # Non-secret config (city, reminder time)
 ```
 
-Secrets (Telegram token, chat ID) are stored via `podman secret` — NOT in settings.json or env vars.
+Secrets (Telegram token/chat ID, Anthropic API key) are stored via `podman secret` — NOT in settings.json or env vars.
 
 ### Container environment variables
 
@@ -181,11 +181,12 @@ The plant was saved but Claude CLI failed during identification. Check the debug
 1. Delete and re-add the plant through the UI
 2. Or check why Claude CLI failed:
    ```bash
-   # Test Claude CLI works inside the container
+   # Test Claude CLI works inside the container (uses anthropic_api_key secret)
    podman exec plant-tracker claude -p "say hello" --output-format text
 
-   # If it hangs or errors, the host CLI auth may need refreshing:
-   claude -p "say hello"   # run on host, re-auth if prompted
+   # If it errors with an auth message, the key may be missing/invalid:
+   podman secret ls | grep anthropic_api_key
+   # Rotate it: podman secret rm anthropic_api_key && echo "NEW_KEY" | podman secret create anthropic_api_key - && ./deploy.sh
    ```
 
 ### Debug endpoints
@@ -222,7 +223,7 @@ SELECT * FROM claude_logs ORDER BY created_at DESC LIMIT 5;
 
 ## Key Design Decisions
 
-- **Claude CLI** invoked as subprocess (`claude -p`), not the SDK. Uses `--json-schema` for structured output (parsed from `structured_output` field in JSON envelope) and `--add-dir` to grant read access to photo directory. 120s timeout prevents hangs.
+- **Claude CLI** invoked as subprocess (`claude -p`), not the SDK. Uses `--json-schema` for structured output (parsed from `structured_output` field in JSON envelope) and `--add-dir` to grant read access to photo directory. 120s timeout prevents hangs. Authenticates via the `anthropic_api_key` Podman secret with an ephemeral `HOME` (`/tmp/claude-cli-home`), not the host's interactive `claude` login — sharing an OAuth session between an interactive host process and a headless container process hit unrecoverable refresh-token races (see git history around Aug 2026) since Anthropic's refresh tokens are single-use/rotating.
 - **Photos** stored on filesystem, DB holds web path (`/photos/filename`). Served via StaticFiles mount using `PLANTS_PHOTO_DIR` env var.
 - **SPA routing**: FastAPI catch-all route at `/{path:path}` serves static files or falls back to `index.html`.
 - **Telegram** uses MarkdownV2 for watering reminders (Rick and Morty themed, rotating daily), plain text for test messages. `send_message()` takes optional `parse_mode` param.
@@ -230,8 +231,8 @@ SELECT * FROM claude_logs ORDER BY created_at DESC LIMIT 5;
 - **Background identification**: `asyncio.create_task` with full try/except + logging. Checks plant still exists before writing. Triggers `job_adjust_schedules` immediately after to apply weather-based adjustment.
 - **Claude call logging**: every CLI call is logged to `claude_logs` table with task, prompt, response, error, and duration.
 - **Plant location**: indoor/balcony toggle affects schedule adjustment — balcony plants get temperature-aware intervals.
-- **Secrets**: `settings.py` reads from `/run/secrets/` first (Podman secrets), falls back to `settings.json`. In container mode, Telegram creds come from secrets only.
-- **Container networking**: `--user 1000:1000` with `:U` volume mounts for proper subordinate UID ownership. `deploy.sh` stages Claude config to a world-readable copy so the container's subordinate UID can read it. `pasta:--ipv4-only` prevents IPv6 accept-then-reset that breaks Safari with `.local` mDNS.
+- **Secrets**: `settings.py` reads from `/run/secrets/` first (Podman secrets), falls back to `settings.json`. In container mode, Telegram creds come from secrets only. `services/claude.py` reuses the same `_read_secret()` helper for `anthropic_api_key`, falling back to the `ANTHROPIC_API_KEY` env var for local dev.
+- **Container networking**: `--user 1000:1000` with `:U` volume mounts for proper subordinate UID ownership. `pasta:--ipv4-only` prevents IPv6 accept-then-reset that breaks Safari with `.local` mDNS.
 - **Geocoding**: Open-Meteo geocoding strips country suffix ("London, UK" → "London") as the API doesn't handle the comma format.
 - **Weather**: fetches 7 past + 3 forecast days, all included in adjustment query. `INSERT OR REPLACE` on unique date avoids duplicates.
 
@@ -242,7 +243,7 @@ SELECT * FROM claude_logs ORDER BY created_at DESC LIMIT 5;
 Check Settings → Debug → Claude Logs for the error. Common causes:
 - Empty response: Claude CLI `--json-schema` requires `--output-format json` (not `text`). The structured output is in the `structured_output` field of the JSON envelope.
 - Permission denied on photo: `--add-dir` must be passed to grant Claude CLI read access to the photo directory.
-- `.claude.json` not found: host `~/.claude.json` must be mounted into the container.
+- Auth error / timeout with no output: `anthropic_api_key` Podman secret missing or invalid — check with `podman secret ls` and rotate if needed (see runbook above).
 
 ### Photos not loading
 
